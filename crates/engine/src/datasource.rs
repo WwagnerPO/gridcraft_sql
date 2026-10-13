@@ -53,6 +53,34 @@ pub struct QueryResult {
     pub truncated: bool,
 }
 
+/// A statement to run with parameters: `@P1`, `@P2`… take `params` in order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Statement {
+    pub sql: String,
+    pub params: Vec<DbValue>,
+    /// The rows it must affect, else the whole batch is rolled back (a row changed or deleted on
+    /// the server since it was loaded).
+    pub expect_rows: Option<u64>,
+}
+
+impl Statement {
+    pub fn new(sql: impl Into<String>, params: Vec<DbValue>) -> Statement {
+        Statement { sql: sql.into(), params, expect_rows: None }
+    }
+}
+
+/// A column of a database table.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DbColumn {
+    pub name: String,
+    /// The type as SQL Server names it (`int`, `nvarchar`, `datetime2`…).
+    pub sql_type: String,
+    pub nullable: bool,
+    pub primary_key: bool,
+    /// Filled by the server (identity or computed): never written.
+    pub generated: bool,
+}
+
 /// Errors a provider reports. [`DbError::Credentials`] makes the interface ask for a login.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DbError {
@@ -97,6 +125,54 @@ pub trait DataProvider: Send + Sync {
     fn objects(&self, source: &DataSource, credential: &Credential) -> Result<Vec<DbObject>, DbError>;
     /// Runs `command`, returning at most `max_rows` rows (and at most [`MAX_CELLS`] cells).
     fn query(&self, source: &DataSource, credential: &Credential, command: &QueryCommand, max_rows: usize) -> Result<QueryResult, DbError>;
+    /// The columns of a table, primary key marked.
+    fn columns(&self, _source: &DataSource, _credential: &Credential, _schema: &str, _name: &str) -> Result<Vec<DbColumn>, DbError> {
+        Err(DbError::Other(WRITE_NOT_SUPPORTED.into()))
+    }
+    /// Runs `statements` in one transaction: all of them or none. Returns the rows each affected.
+    fn execute(&self, _source: &DataSource, _credential: &Credential, _statements: &[Statement]) -> Result<Vec<u64>, DbError> {
+        Err(DbError::Other(WRITE_NOT_SUPPORTED.into()))
+    }
+}
+
+/// The error of a provider that only reads.
+pub const WRITE_NOT_SUPPORTED: &str = "This connection can only read data.";
+
+/// A serial number as SQL Server reads it in a string: `2023-03-15T12:00:00.000` (date-times),
+/// `2023-03-15` (dates), `12:00:00.000` (times). `None` for numbers that aren't dates.
+pub fn serial_to_iso(serial: f64, value: &DbValue) -> Option<String> {
+    if !serial.is_finite() || serial < 0.0 {
+        return None;
+    }
+    let whole = serial.floor();
+    let ms = ((serial - whole) * 86_400_000.0).round() as i64;
+    let (h, m, s, f) = (ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000);
+    let time = format!("{h:02}:{m:02}:{s:02}.{f:03}");
+    if matches!(value, DbValue::Time(_)) {
+        return Some(time);
+    }
+    // Serial 60 is the fictitious 29 February 1900; 61 is 1 March.
+    let mut d = whole as i64;
+    if d < 1 {
+        return None;
+    }
+    if d >= 61 {
+        d -= 1;
+    } else if d == 60 {
+        return None;
+    }
+    // Days since 1899-12-31 → civil date.
+    let z = d - 25_568 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    let date = format!("{year:04}-{month:02}-{day:02}");
+    Some(if matches!(value, DbValue::Date(_)) { date } else { format!("{date}T{time}") })
 }
 
 /// The key credentials are kept under: the server name as typed, trimmed and lower-cased.
@@ -156,6 +232,17 @@ mod tests {
         assert_eq!(parse_object_name(""), None);
         assert_eq!(parse_object_name("a.b.c"), None);
         assert_eq!(parse_object_name("[unclosed"), None);
+    }
+
+    #[test]
+    fn iso_dates() {
+        assert_eq!(serial_to_iso(45_000.5, &DbValue::DateTime(0.0)).as_deref(), Some("2023-03-15T12:00:00.000"));
+        assert_eq!(serial_to_iso(45_000.0, &DbValue::Date(0.0)).as_deref(), Some("2023-03-15"));
+        assert_eq!(serial_to_iso(0.75, &DbValue::Time(0.0)).as_deref(), Some("18:00:00.000"));
+        assert_eq!(serial_to_iso(1.0, &DbValue::Date(0.0)).as_deref(), Some("1900-01-01"));
+        assert_eq!(serial_to_iso(61.0, &DbValue::Date(0.0)).as_deref(), Some("1900-03-01"));
+        assert_eq!(serial_to_iso(60.0, &DbValue::Date(0.0)), None);
+        assert_eq!(serial_to_iso(f64::NAN, &DbValue::Date(0.0)), None);
     }
 
     #[test]

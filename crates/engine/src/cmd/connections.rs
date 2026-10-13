@@ -83,16 +83,16 @@ pub fn specs() -> Vec<CommandSpec> {
 }
 
 /// The provider, or the error that says this host has none.
-fn provider(s: &Session) -> Result<Arc<dyn datasource::DataProvider>> {
+pub(crate) fn provider(s: &Session) -> Result<Arc<dyn datasource::DataProvider>> {
     s.data_provider().ok_or_else(|| EngineError::Other(datasource::NOT_AVAILABLE.into()))
 }
 
-fn db_error(e: datasource::DbError) -> EngineError {
+pub(crate) fn db_error(e: datasource::DbError) -> EngineError {
     EngineError::Other(e.to_string())
 }
 
 /// The source a call names (`server`, `database`, `encrypt`, `trustServerCertificate`).
-fn source_param(cmd: &str, p: &Json) -> Result<DataSource> {
+pub(crate) fn source_param(cmd: &str, p: &Json) -> Result<DataSource> {
     let server = str_param(p, "server").map(str::trim).filter(|v| !v.is_empty()).ok_or_else(|| bad(cmd, "missing `server`"))?;
     if server.len() > 256 {
         return Err(bad(cmd, "`server` is too long"));
@@ -110,7 +110,7 @@ fn source_param(cmd: &str, p: &Json) -> Result<DataSource> {
 }
 
 /// Stores `user`/`password` when given, then returns the session's login for the source's server.
-fn credential_for(s: &mut Session, source: &DataSource, p: &Json) -> Result<Credential> {
+pub(crate) fn credential_for(s: &mut Session, source: &DataSource, p: &Json) -> Result<Credential> {
     if let (Some(user), Some(password)) = (str_param(p, "user"), str_param(p, "password")) {
         s.set_credential(source.server(), Credential { user: user.to_string(), password: password.to_string() });
     }
@@ -176,7 +176,7 @@ fn display(v: &DbValue) -> Json {
 }
 
 /// Column names made unique (case-insensitively) and never blank, as table headers must be.
-fn header_names(columns: &[String]) -> Vec<String> {
+pub(crate) fn header_names(columns: &[String]) -> Vec<String> {
     let mut taken = std::collections::HashSet::new();
     columns
         .iter()
@@ -196,7 +196,7 @@ fn header_names(columns: &[String]) -> Vec<String> {
 
 /// The result cut to the sheet: at most [`datasource::MAX_ROWS`] rows, the sheet's columns and
 /// [`datasource::MAX_CELLS`] cells.
-fn fit(mut r: QueryResult) -> QueryResult {
+pub(crate) fn fit(mut r: QueryResult) -> QueryResult {
     r.columns.truncate(gridcraft_core::MAX_COLS as usize);
     let w = r.columns.len().max(1);
     let max_rows = datasource::MAX_ROWS.min(datasource::MAX_CELLS / w);
@@ -398,6 +398,7 @@ fn load_new(s: &mut Session, source: &DataSource, user: &str, command: QueryComm
     if let Some(d) = s.active_mut() {
         d.sheet_selections.insert(si.min(d.sheet_selections.len()), crate::Selection::default());
     }
+    super::dbwrite::remember(s, conn_id, &r.columns, &r.rows);
     let cols = range.width();
     quietly(s, |s| {
         let _ = s.execute("home.autofitColumnWidth", json!({"cols": RangeRef::cols(0, cols - 1).a1()}));
@@ -479,7 +480,7 @@ fn preview(s: &mut Session, p: &Json) -> Result<Json> {
 
 /// The connection a call names (`connection`, or `table`), else the one whose table holds the
 /// active cell.
-fn find_connection(s: &Session, p: &Json, cmd: &str) -> Result<usize> {
+pub(crate) fn find_connection(s: &Session, p: &Json, cmd: &str) -> Result<usize> {
     let d = s.doc()?;
     let conns = &d.wb.connections;
     if let Some(n) = str_param(p, "connection") {
@@ -503,7 +504,7 @@ fn refresh(s: &mut Session, p: &Json) -> Result<Json> {
 }
 
 /// Fetches connection `ci`'s rows again and rewrites its table.
-fn refresh_one(s: &mut Session, ci: usize) -> Result<Json> {
+pub(crate) fn refresh_one(s: &mut Session, ci: usize) -> Result<Json> {
     let conn = s.doc()?.wb.connections.get(ci).cloned().ok_or_else(|| bad("data.refresh", "no such query"))?;
     let (si, ti) =
         s.doc()?.wb.table(&conn.table).ok_or_else(|| EngineError::Other(format!("The table `{}` of query `{}` is gone.", conn.table, conn.name)))?;
@@ -580,6 +581,7 @@ fn refresh_one(s: &mut Session, ci: usize) -> Result<Json> {
         cx.structural = true;
         Ok(range)
     })?;
+    super::dbwrite::remember(s, conn.id, &r.columns, &r.rows);
     if r.truncated {
         s.ui_requests.push(crate::UiRequest::Message(format!(
             "The query returned more rows than a worksheet holds. The first {} rows were loaded.",

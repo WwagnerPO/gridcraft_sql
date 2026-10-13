@@ -790,6 +790,10 @@ impl Dialog {
                 json!({"stage": "source", "server": p("server").as_str().unwrap_or(""), "database": p("database").as_str().unwrap_or(""), "encrypt": true, "trust": false}),
             ),
             "dataSourceSettings" => Dialog::custom("dataSourceSettings", "Data Source Settings", json!({})),
+            // Write dialogs take their values back from `params` after a sign-in.
+            "saveToDatabase" => Dialog::custom("saveToDatabase", "Save Changes to Database", params.clone()),
+            "exportToSqlServer" => Dialog::custom("exportToSqlServer", "Export to SQL Server", params.clone()),
+            "sqlExecute" => Dialog::custom("sqlExecute", "Run SQL", params.clone()),
             "connectionProperties" => {
                 let name = p("connection").as_str().map(str::to_string).or_else(|| {
                     let doc = app.session.active()?;
@@ -1092,7 +1096,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         "analysisToolPak" => 420.0,
         "solver" => 460.0,
         "sqlServer" if matches!(d.values.get("stage").and_then(Json::as_str), Some("navigator" | "preview")) => 680.0,
-        "sqlServer" | "dataSourceSettings" => 440.0,
+        "sqlServer" | "dataSourceSettings" | "saveToDatabase" | "exportToSqlServer" | "sqlExecute" => 440.0,
         _ => 380.0,
     };
     let window = egui::Window::new(app.ui.language.tr(&d.title))
@@ -1120,6 +1124,9 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 "goalSeek" => goal_seek(app, ui, &mut d, &mut confirm),
                 "sqlServer" => crate::get_data::sql_server(app, ui, &mut d, &mut open),
                 "dataSourceSettings" => crate::get_data::data_source_settings(app, ui, &mut d, &mut open),
+                "saveToDatabase" => crate::get_data::save_to_database(app, ui, &mut d, &mut open),
+                "exportToSqlServer" => crate::get_data::export_to_sql_server(app, ui, &mut d, &mut open),
+                "sqlExecute" => crate::get_data::run_sql(app, ui, &mut d, &mut open),
                 "analysisToolPak" => analysis_toolpak(app, ui, &mut d, &mut confirm, &mut open),
                 "solver" => solver(ui, &mut d, &mut confirm, &mut open),
                 "solverResults" => solver_results(app, ui, &mut d, &mut open),

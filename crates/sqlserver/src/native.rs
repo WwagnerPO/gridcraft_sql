@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use futures_util::TryStreamExt;
-use gridcraft_engine::datasource::{self, Credential, DataProvider, DbError, DbObject, DbValue, QueryResult};
+use gridcraft_engine::datasource::{self, Credential, DataProvider, DbColumn, DbError, DbObject, DbValue, QueryResult, Statement};
 use gridcraft_engine::model::{DataSource, QueryCommand};
 use tiberius::{AuthMethod, Client, ColumnData, Config, EncryptionLevel, QueryItem};
 use tokio::net::TcpStream;
@@ -44,7 +44,7 @@ fn map_error(server: &str, e: tiberius::error::Error) -> DbError {
 }
 
 impl SqlServerProvider {
-    fn config(&self, source: &DataSource, credential: &Credential) -> Result<Config, DbError> {
+    fn config(&self, source: &DataSource, credential: &Credential, write: bool) -> Result<Config, DbError> {
         let DataSource::SqlServer { server, database, encrypt, trust_server_certificate } = source;
         let addr = convert::parse_server(server).map_err(DbError::Other)?;
         let mut c = Config::new();
@@ -67,14 +67,14 @@ impl SqlServerProvider {
         }
         c.handshake_timeout(Some(self.connect_timeout));
         c.command_timeout(Some(self.command_timeout));
-        // Read only: Get Data never writes.
-        c.readonly(true);
+        // Read intent unless the call writes (Run SQL, Export, Save to Database).
+        c.readonly(!write);
         Ok(c)
     }
 
-    async fn connect(&self, source: &DataSource, credential: &Credential) -> Result<Conn, DbError> {
+    async fn connect(&self, source: &DataSource, credential: &Credential, write: bool) -> Result<Conn, DbError> {
         let server = source.server().to_string();
-        let mut config = self.config(source, credential)?;
+        let mut config = self.config(source, credential, write)?;
         // Azure SQL may redirect the login once to another address.
         for _ in 0..2 {
             let tcp = self.tcp(&server, &config).await?;
@@ -112,6 +112,7 @@ impl SqlServerProvider {
         &self,
         source: &DataSource,
         credential: &Credential,
+        write: bool,
         work: impl for<'c> FnOnce(&'c mut Conn) -> futures_util::future::BoxFuture<'c, Result<T, DbError>> + Send + 'static,
     ) -> Result<T, DbError> {
         let this = self.clone();
@@ -126,7 +127,7 @@ impl SqlServerProvider {
                     .build()
                     .map_err(|e| DbError::Other(format!("Couldn't start the connection: {e}")))?;
                 rt.block_on(async move {
-                    let mut client = this.connect(&source, &credential).await?;
+                    let mut client = this.connect(&source, &credential, write).await?;
                     let r = work(&mut client).await;
                     let _ = client.close().await;
                     r
@@ -139,7 +140,11 @@ impl SqlServerProvider {
 
 /// The first result set of `sql`: column names and at most `max_rows` rows.
 async fn first_result(server: &str, client: &mut Conn, sql: String, max_rows: usize) -> Result<QueryResult, DbError> {
-    let mut stream = client.simple_query(sql).await.map_err(|e| map_error(server, e))?;
+    let stream = client.simple_query(sql).await.map_err(|e| map_error(server, e))?;
+    collect(server, stream, max_rows).await
+}
+
+async fn collect(server: &str, mut stream: tiberius::QueryStream<'_>, max_rows: usize) -> Result<QueryResult, DbError> {
     let mut out = QueryResult::default();
     let mut current: Option<usize> = None;
     let mut cells = 0usize;
@@ -212,6 +217,52 @@ fn value(v: &ColumnData<'_>) -> DbValue {
     }
 }
 
+fn bind(q: &mut tiberius::Query<'_>, v: DbValue) {
+    match v {
+        DbValue::Null => q.bind(Option::<String>::None),
+        DbValue::Bool(b) => q.bind(b),
+        DbValue::Number(n) => q.bind(n),
+        DbValue::Text(t) => q.bind(t),
+        DbValue::Date(n) | DbValue::DateTime(n) | DbValue::Time(n) => match datasource::serial_to_iso(n, &v) {
+            Some(iso) => q.bind(iso),
+            None => q.bind(n),
+        },
+    }
+}
+
+/// Runs the statements in one transaction; any failure (or a statement that didn't affect the
+/// rows it had to) rolls everything back.
+async fn run_all(server: &str, client: &mut Conn, statements: Vec<Statement>) -> Result<Vec<u64>, DbError> {
+    client.begin_transaction().await.map_err(|e| map_error(server, e))?;
+    let mut out = Vec::with_capacity(statements.len());
+    for (i, st) in statements.into_iter().enumerate() {
+        let expect = st.expect_rows;
+        let mut q = tiberius::Query::new(st.sql);
+        for p in st.params {
+            bind(&mut q, p);
+        }
+        let r = match q.execute(client).await {
+            Ok(r) => r.total(),
+            Err(e) => {
+                let _ = client.rollback_transaction().await;
+                return Err(map_error(server, e));
+            }
+        };
+        if let Some(want) = expect
+            && r != want
+        {
+            let _ = client.rollback_transaction().await;
+            return Err(DbError::Other(format!(
+                "Nothing was changed: statement {} affected {r} rows instead of {want} (the row may have been changed or deleted on the server since it was loaded). Refresh and try again.",
+                i + 1
+            )));
+        }
+        out.push(r);
+    }
+    client.commit_transaction().await.map_err(|e| map_error(server, e))?;
+    Ok(out)
+}
+
 /// The statement for a command; `top` limits a table read (previews).
 fn statement(command: &QueryCommand, top: Option<usize>) -> String {
     match command {
@@ -231,9 +282,61 @@ fn statement(command: &QueryCommand, top: Option<usize>) -> String {
 }
 
 impl DataProvider for SqlServerProvider {
+    fn columns(&self, source: &DataSource, credential: &Credential, schema: &str, name: &str) -> Result<Vec<DbColumn>, DbError> {
+        let server = source.server().to_string();
+        let object = if schema.is_empty() {
+            convert::quote_identifier(name)
+        } else {
+            format!("{}.{}", convert::quote_identifier(schema), convert::quote_identifier(name))
+        };
+        let r = self.run(source, credential, false, move |c| {
+            Box::pin(async move {
+                let sql = "SELECT c.name, t.name, c.is_nullable, \
+                    CAST(CASE WHEN c.is_identity = 1 OR c.is_computed = 1 OR t.name IN ('timestamp', 'rowversion') THEN 1 ELSE 0 END AS bit), \
+                    CAST(CASE WHEN EXISTS (SELECT 1 FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id \
+                        WHERE i.is_primary_key = 1 AND ic.object_id = c.object_id AND ic.column_id = c.column_id) THEN 1 ELSE 0 END AS bit) \
+                    FROM sys.columns c JOIN sys.types t ON t.user_type_id = c.user_type_id \
+                    WHERE c.object_id = OBJECT_ID(@P1) ORDER BY c.column_id";
+                let mut q = tiberius::Query::new(sql);
+                q.bind(object);
+                let stream = q.query(c).await.map_err(|e| map_error(&server, e))?;
+                collect(&server, stream, 10_000).await
+            })
+        })?;
+        let text = |v: Option<&DbValue>| match v {
+            Some(DbValue::Text(t)) => t.clone(),
+            _ => String::new(),
+        };
+        let flag = |v: Option<&DbValue>| matches!(v, Some(DbValue::Bool(true)));
+        let cols: Vec<DbColumn> = r
+            .rows
+            .iter()
+            .map(|row| DbColumn {
+                name: text(row.first()),
+                sql_type: text(row.get(1)),
+                nullable: flag(row.get(2)),
+                generated: flag(row.get(3)),
+                primary_key: flag(row.get(4)),
+            })
+            .collect();
+        if cols.is_empty() {
+            return Err(DbError::Other(format!(
+                "The table `{}` doesn't exist, or this login can't see it.",
+                if schema.is_empty() { name.to_string() } else { format!("{schema}.{name}") }
+            )));
+        }
+        Ok(cols)
+    }
+
+    fn execute(&self, source: &DataSource, credential: &Credential, statements: &[Statement]) -> Result<Vec<u64>, DbError> {
+        let server = source.server().to_string();
+        let statements = statements.to_vec();
+        self.run(source, credential, true, move |c| Box::pin(async move { run_all(&server, c, statements).await }))
+    }
+
     fn databases(&self, source: &DataSource, credential: &Credential) -> Result<Vec<String>, DbError> {
         let server = source.server().to_string();
-        let r = self.run(source, credential, move |c| {
+        let r = self.run(source, credential, false, move |c| {
             Box::pin(async move {
                 let sql = "SELECT name FROM sys.databases WHERE HAS_DBACCESS(name) = 1 ORDER BY name".to_string();
                 first_result(&server, c, sql, 100_000).await
@@ -250,7 +353,7 @@ impl DataProvider for SqlServerProvider {
 
     fn objects(&self, source: &DataSource, credential: &Credential) -> Result<Vec<DbObject>, DbError> {
         let server = source.server().to_string();
-        let r = self.run(source, credential, move |c| {
+        let r = self.run(source, credential, false, move |c| {
             Box::pin(async move {
                 let sql = "SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_SCHEMA, TABLE_NAME".to_string();
                 first_result(&server, c, sql, 1_000_000).await
@@ -272,7 +375,7 @@ impl DataProvider for SqlServerProvider {
         // A preview of a table asks the server for no more than it shows.
         let top = (max_rows <= 10_000).then_some(max_rows.saturating_add(1));
         let sql = statement(command, top);
-        self.run(source, credential, move |c| Box::pin(async move { first_result(&server, c, sql, max_rows).await }))
+        self.run(source, credential, false, move |c| Box::pin(async move { first_result(&server, c, sql, max_rows).await }))
     }
 }
 

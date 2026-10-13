@@ -37,6 +37,27 @@ name, description, *Refresh data when opening the file*, *Refresh every N minute
 statement, the SQL text. Deleting a query keeps its table with the rows last loaded; converting the
 table to a range removes its query, as in Excel.
 
+## Writing to the database
+
+**Data › Database** writes back, always in **one transaction** (all of it or nothing), after showing
+what it will send. Undo in GridCraft doesn't undo a write on the server, and these commands aren't
+journaled, so replaying a recorded script never writes again.
+
+- **Save Changes to Database…** sends what changed in a loaded table since its last load or
+  refresh: new rows are inserted, edited cells updated, removed rows deleted, matched by the
+  table's **primary key** (a table without one can't be saved back). Each update and delete must
+  hit exactly one row, so a row someone changed or deleted on the server meanwhile stops the save
+  and nothing is written. Identity and computed columns are left to the server; afterwards the
+  table is refreshed. Only queries that load a whole table can be saved (not SQL statements), and
+  after reopening a file, refresh first.
+- **Export to SQL Server…** writes a range or table (column names in its first row) to a table:
+  **New table** creates it with types read from the cells (text, whole and decimal numbers, dates,
+  date-times, times, TRUE/FALSE), **Add rows** inserts into an existing table matching columns by
+  name, **Replace all rows** deletes its rows first. **Preview** shows the rows and column types.
+- **Run SQL…** runs a statement or stored procedure (`EXEC dbo.CloseMonth`), optionally with cell
+  values as parameters `@P1`, `@P2`… (`UPDATE dbo.Prices SET Price = @P1 WHERE Code = @P2` with
+  cells `B2, C2`), after asking.
+
 ## Credentials
 
 Logins are kept **in memory for the session only**, per server. They never go into the workbook,
@@ -66,6 +87,9 @@ are added next to them.
 | `data.connectionProperties` | `{connection, name?, description?, refreshOnOpen?, refreshMinutes?, sql?, table?, user?}` |
 | `data.deleteConnection` | `{connection}` |
 | `data.queriesConnections` | `{tables, connections}` |
+| `data.saveToDatabase` | `{table? \| connection?, dryRun?}` → `{inserted, updated, deleted}` |
+| `data.exportToSqlServer` | `{table, range?, mode?: create \| append \| replace, connection? \| server…, dryRun?}` |
+| `data.sqlExecute` | `{sql, params? \| cells?, connection? \| server…}` → `{rowsAffected}` |
 
 ```sh
 gridcraft-cli run --cmd 'data.fromSqlServer={"server":"db.example,1433","database":"Shop","table":"dbo.Customers","user":"reader","password":"…"}' --out customers.xlsx
@@ -76,7 +100,7 @@ gridcraft-cli run --in customers.xlsx --cmd 'data.dataSourceSettings={"server":"
 
 - **Sign-in:** SQL Server logins only. Windows (integrated) and Microsoft Entra sign-in are not
   supported yet.
-- **Read only:** Get Data never writes to the database (the connection is opened read-intent).
+- **Reading** opens the connection read-intent; only the Database menu's commands write.
 - **Size:** at most 1,048,575 rows and 50 million cells per query; larger results load the first
   rows and say so. Text is cut at 32,767 characters, binary columns load as `0x…` hex text.
 - **No Power Query editor:** queries can't be shaped (filter, merge, change types) before loading;

@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use egui::vec2;
 use egui_kittest::kittest::Queryable;
 use gridcraft_engine::Session;
-use gridcraft_engine::datasource::{Credential, DataProvider, DbError, DbObject, DbValue, QueryResult};
+use gridcraft_engine::datasource::{Credential, DataProvider, DbColumn, DbError, DbObject, DbValue, QueryResult, Statement};
 use gridcraft_engine::model::{DataSource, QueryCommand};
 use gridcraft_ui_egui::SheetApp;
 use serde_json::{Value as Json, json};
@@ -17,6 +17,7 @@ type Harness = egui_kittest::Harness<'static, SheetApp>;
 #[derive(Default)]
 struct FakeDb {
     queries: Mutex<usize>,
+    written: Mutex<Vec<Statement>>,
 }
 
 impl FakeDb {
@@ -37,6 +38,16 @@ impl DataProvider for FakeDb {
             DbObject { schema: "dbo".into(), name: "Orders".into(), view: false },
             DbObject { schema: "sales".into(), name: "Top Customers".into(), view: true },
         ])
+    }
+    fn columns(&self, _: &DataSource, c: &Credential, _: &str, _: &str) -> Result<Vec<DbColumn>, DbError> {
+        FakeDb::login(c)?;
+        let col = |n: &str, t: &str, pk: bool| DbColumn { name: n.into(), sql_type: t.into(), nullable: !pk, primary_key: pk, generated: false };
+        Ok(vec![col("Id", "int", true), col("Name", "nvarchar", false), col("Since", "date", false), col("Active", "bit", false)])
+    }
+    fn execute(&self, _: &DataSource, c: &Credential, st: &[Statement]) -> Result<Vec<u64>, DbError> {
+        FakeDb::login(c)?;
+        self.written.lock().map_err(|_| DbError::Other("poisoned".into()))?.extend(st.iter().cloned());
+        Ok(st.iter().map(|x| x.expect_rows.unwrap_or(1)).collect())
     }
     fn query(&self, _: &DataSource, c: &Credential, _: &QueryCommand, max: usize) -> Result<QueryResult, DbError> {
         FakeDb::login(c)?;
@@ -229,4 +240,72 @@ fn an_expired_certificate_can_be_trusted() {
     settle(&mut h);
     assert_eq!(stage(&h), "navigator");
     assert_eq!(h.state().dialog.as_ref().unwrap().values["trust"], true);
+}
+
+#[test]
+fn write_dialogs_preview_then_write() {
+    let db = Arc::new(FakeDb::default());
+    let mut h = harness(db.clone());
+    h.state_mut().session.set_credential("db.example", Credential { user: "reader".into(), password: "pw".into() });
+    h.state_mut().run("data.fromSqlServer", json!({"server": "db.example", "database": "Shop", "table": "dbo.Customers"})).unwrap();
+    h.state_mut().run("cell.set", json!({"cell": "B3", "input": "Renamed"})).unwrap();
+    h.state_mut().run("selection.set", json!({"range": "A2"})).unwrap();
+    // Save Changes: the plan first, then Save.
+    h.state_mut().open_dialog("saveToDatabase", json!({}));
+    settle(&mut h);
+    let plan = h.state().dialog.as_ref().unwrap().values["plan"].clone();
+    assert_eq!(plan["updated"], 1, "{plan}");
+    snapshot(&mut h, "7-save-changes");
+    assert!(db.written.lock().unwrap().is_empty(), "the plan writes nothing");
+    h.get_by_label("Save").click();
+    settle(&mut h);
+    assert!(h.state().dialog.is_none());
+    assert!(db.written.lock().unwrap().iter().any(|x| x.sql.starts_with("UPDATE")));
+
+    // Export: Preview, then Export.
+    db.written.lock().unwrap().clear();
+    h.state_mut().open_dialog("exportToSqlServer", json!({"table": "dbo.Copy"}));
+    settle(&mut h);
+    h.get_by_label("Preview").click();
+    settle(&mut h);
+    let plan = h.state().dialog.as_ref().unwrap().values["plan"].clone();
+    assert_eq!(plan["rows"], 5, "{plan}");
+    snapshot(&mut h, "8-export");
+    h.get_by_label("Export").click();
+    settle(&mut h);
+    assert!(h.state().dialog.is_none());
+    assert!(db.written.lock().unwrap()[0].sql.starts_with("CREATE TABLE [dbo].[Copy]"));
+
+    // Run SQL asks before running.
+    db.written.lock().unwrap().clear();
+    h.state_mut().open_dialog("sqlExecute", json!({"sql": "EXEC dbo.CloseMonth"}));
+    settle(&mut h);
+    h.get_by_label("Run…").click();
+    settle(&mut h);
+    assert!(db.written.lock().unwrap().is_empty());
+    snapshot(&mut h, "9-run-sql");
+    h.get_by_label("Run").click();
+    settle(&mut h);
+    assert_eq!(db.written.lock().unwrap()[0].sql, "EXEC dbo.CloseMonth");
+}
+
+#[test]
+fn a_write_without_a_login_asks_for_it_and_comes_back() {
+    let db = Arc::new(FakeDb::default());
+    let mut h = harness(db.clone());
+    h.state_mut().open_dialog("sqlExecute", json!({"sql": "EXEC x", "connection": "", "picked": true, "server": "db.example", "database": "Shop"}));
+    settle(&mut h);
+    h.get_by_label("Run…").click();
+    settle(&mut h);
+    h.get_by_label("Run").click();
+    settle(&mut h);
+    assert_eq!(stage(&h), "credentials");
+    set(&mut h, "user", json!("reader"));
+    set(&mut h, "password", json!("pw"));
+    settle(&mut h);
+    h.get_by_label("Connect").click();
+    settle(&mut h);
+    let d = h.state().dialog.as_ref().expect("Run SQL comes back");
+    assert_eq!(d.name(), "sqlExecute");
+    assert_eq!(d.values["sql"], "EXEC x");
 }

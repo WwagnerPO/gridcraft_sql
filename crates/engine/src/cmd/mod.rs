@@ -4,6 +4,7 @@
 pub mod analysis;
 pub mod connections;
 pub mod data;
+pub mod dbwrite;
 pub mod draw;
 pub mod edit;
 pub mod extra;
@@ -132,6 +133,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(insert::specs());
         v.extend(data::specs());
         v.extend(connections::specs());
+        v.extend(dbwrite::specs());
         v.extend(formulas::specs());
         v.extend(review::specs());
         v.extend(view::specs());

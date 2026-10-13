@@ -262,6 +262,8 @@ pub struct Session {
     /// Database logins entered this session, by [`datasource::credential_key`]. Never saved in a
     /// workbook or the journal.
     credentials: Vec<(String, datasource::Credential)>,
+    /// What each query last loaded, for Save to Database (memory only).
+    pub(crate) snapshots: Vec<cmd::dbwrite::Snapshot>,
 }
 
 impl Session {

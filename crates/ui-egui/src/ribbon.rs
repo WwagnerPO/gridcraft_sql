@@ -1929,6 +1929,18 @@ fn data(app: &mut SheetApp, ui: &mut Ui) {
             app.open_dialog("connectionProperties", json!({}));
         }
     });
+    let db = big_button(ui, Icon::Database, "Database", "Write to a database", true);
+    egui::Popup::menu(&db).show(|ui| {
+        menu_items(
+            app,
+            ui,
+            &[
+                ("Save Changes to Database…", "dialog:saveToDatabase", json!({})),
+                ("Export to SQL Server…", "dialog:exportToSqlServer", json!({})),
+                ("Run SQL…", "dialog:sqlExecute", json!({})),
+            ],
+        );
+    });
     sep(ui);
     ui.vertical(|ui| {
         let __k = small_button(ui, Icon::SortAsc, "", "Sort A to Z", false);

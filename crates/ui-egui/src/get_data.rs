@@ -224,7 +224,11 @@ fn credentials(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut bool)
                 } else {
                     *open = false;
                     let params = d.values.get("retryParams").cloned().unwrap_or(json!({}));
-                    refresh_with_login(app, &retry, params);
+                    match retry.strip_prefix("dialog:") {
+                        // A write dialog asked for the login: it comes back as it was.
+                        Some(name) => app.open_dialog(name, params),
+                        None => refresh_with_login(app, &retry, params),
+                    }
                 }
             }
         });
@@ -594,6 +598,9 @@ pub fn queries_pane(app: &mut SheetApp, ui: &mut Ui) {
                 if ui.small_button(tr(app, "Refresh")).clicked() {
                     refresh_with_login(app, "data.refresh", json!({"connection": c.name}));
                 }
+                if matches!(c.command, gridcraft_engine::model::QueryCommand::Table { .. }) && ui.small_button(tr(app, "Save changes…")).clicked() {
+                    app.open_dialog("saveToDatabase", json!({"table": c.table}));
+                }
                 if ui.small_button(tr(app, "Properties…")).clicked() {
                     app.open_dialog("connectionProperties", json!({"connection": c.name}));
                 }
@@ -659,4 +666,253 @@ pub fn tick(app: &mut SheetApp, ctx: &egui::Context) {
     if next_due.is_finite() {
         ctx.request_repaint_after(std::time::Duration::from_millis(next_due as u64));
     }
+}
+
+// ---------------------------------------------------------------- writing to the database
+
+/// The queries' servers to write to, or a server typed in: the dialog's `target` params.
+fn target_picker(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog) -> Json {
+    let conns: Vec<(String, String, String)> = app
+        .session
+        .active()
+        .map(|doc| doc.wb.connections.iter().map(|c| (c.name.clone(), c.source.server().to_string(), c.source.database().to_string())).collect())
+        .unwrap_or_default();
+    let mut pick = s(d, "connection");
+    if pick.is_empty() && !b(d, "picked", false) {
+        pick = conns.first().map(|c| c.0.clone()).unwrap_or_default();
+    }
+    ui.label(tr(app, "Database"));
+    let shown =
+        conns.iter().find(|c| c.0 == pick).map(|c| format!("{} · {} ({})", c.1, c.2, c.0)).unwrap_or_else(|| tr(app, "Another server…").to_string());
+    egui::ComboBox::from_id_salt("db_target").width(380.0).selected_text(shown).show_ui(ui, |ui| {
+        for c in &conns {
+            if ui.selectable_label(pick == c.0, format!("{} · {} ({})", c.1, c.2, c.0)).clicked() {
+                pick = c.0.clone();
+            }
+        }
+        if ui.selectable_label(pick.is_empty(), tr(app, "Another server…")).clicked() {
+            pick.clear();
+        }
+    });
+    set(d, "picked", json!(true));
+    set(d, "connection", json!(pick));
+    if pick.is_empty() {
+        let (mut server, mut database) = (s(d, "server"), s(d, "database"));
+        let mut trust = b(d, "trust", false);
+        egui::Grid::new("db_target_grid").num_columns(2).show(ui, |ui| {
+            ui.label(tr(app, "Server"));
+            ui.add(egui::TextEdit::singleline(&mut server).desired_width(280.0));
+            ui.end_row();
+            ui.label(tr(app, "Database"));
+            ui.add(egui::TextEdit::singleline(&mut database).desired_width(280.0));
+            ui.end_row();
+        });
+        ui.checkbox(&mut trust, tr(app, "Trust the server certificate"));
+        set(d, "server", json!(server));
+        set(d, "database", json!(database));
+        set(d, "trust", json!(trust));
+        json!({"server": server.trim(), "database": database.trim(), "trustServerCertificate": trust})
+    } else {
+        json!({"connection": pick})
+    }
+}
+
+/// The server a write dialog's params reach (for the login prompt).
+fn server_of(app: &SheetApp, p: &Json) -> String {
+    if let Some(n) = p.get("connection").and_then(Json::as_str) {
+        return app
+            .session
+            .active()
+            .and_then(|d| d.wb.connections.iter().find(|c| c.name == n).map(|c| c.source.server().to_string()))
+            .unwrap_or_default();
+    }
+    p.get("server").and_then(Json::as_str).unwrap_or("").to_string()
+}
+
+/// Runs a write command; a missing or refused login opens the sign-in step, then this dialog
+/// again. `Ok` carries the result.
+fn write(app: &mut SheetApp, d: &mut Dialog, id: &str, p: Json, open: &mut bool) -> Option<Json> {
+    match app.run(id, p.clone()) {
+        Ok(v) => {
+            set(d, "error", json!(""));
+            Some(v)
+        }
+        Err(e) if e.contains(CREDENTIALS_REQUIRED) => {
+            let server = server_of(app, &p);
+            let user = app
+                .session
+                .active()
+                .and_then(|doc| doc.wb.connections.iter().find(|c| c.source.server().eq_ignore_ascii_case(&server)).map(|c| c.user.clone()))
+                .unwrap_or_default();
+            let mut back = d.values.clone();
+            back.insert("error".into(), json!(""));
+            *open = false;
+            app.dialog = Dialog::login(&server, &user, &format!("dialog:{}", d.name()), Json::Object(back));
+            None
+        }
+        Err(e) => {
+            set(d, "error", json!(message(&e)));
+            None
+        }
+    }
+}
+
+/// Save Changes to Database: what will be sent, then Save.
+pub fn save_to_database(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut bool) {
+    let table = s(d, "table");
+    let p = if table.is_empty() { json!({}) } else { json!({"table": table}) };
+    if d.values.get("plan").is_none_or(Json::is_null) && s(d, "error").is_empty() {
+        let mut dry = p.clone();
+        dry["dryRun"] = json!(true);
+        if let Some(v) = write(app, d, "data.saveToDatabase", dry, open) {
+            set(d, "plan", v);
+        }
+        if !*open {
+            return;
+        }
+    }
+    let plan = d.values.get("plan").cloned().unwrap_or(Json::Null);
+    if !plan.is_null() {
+        let n = |k: &str| plan[k].as_u64().unwrap_or(0);
+        ui.label(RichText::new(plan["table"].as_str().unwrap_or("")).strong());
+        egui::Grid::new("save_plan").num_columns(2).show(ui, |ui| {
+            for (label, k) in [("Rows to add", "inserted"), ("Rows to change", "updated"), ("Rows to delete", "deleted")] {
+                ui.label(tr(app, label));
+                ui.label(RichText::new(n(k).to_string()).strong());
+                ui.end_row();
+            }
+        });
+        if n("inserted") + n("updated") + n("deleted") == 0 {
+            ui.label(RichText::new(tr(app, "Nothing has changed since the last refresh.")).italics());
+        } else {
+            ui.label(tr(app, "Everything is sent in one transaction: all of it or nothing. Undo in GridCraft doesn't undo it on the server."));
+        }
+    }
+    error_label(ui, d);
+    ui.add_space(8.0);
+    button_row(ui, |ui| {
+        if secondary(ui, tr(app, "Cancel")) {
+            *open = false;
+        }
+        let ready = plan["inserted"].as_u64().unwrap_or(0) + plan["updated"].as_u64().unwrap_or(0) + plan["deleted"].as_u64().unwrap_or(0) > 0;
+        if ui.add_enabled_ui(ready, |ui| primary(ui, tr(app, "Save"))).inner
+            && let Some(v) = write(app, d, "data.saveToDatabase", p.clone(), open)
+        {
+            *open = false;
+            let total = v["inserted"].as_u64().unwrap_or(0) + v["updated"].as_u64().unwrap_or(0) + v["deleted"].as_u64().unwrap_or(0);
+            app.toast = Some((format!("{total} {}", tr(app, "rows saved to the database.")), crate::now_ms()));
+        }
+    });
+}
+
+/// Export to SQL Server: target, table name, mode; Preview shows the plan, Export writes it.
+pub fn export_to_sql_server(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut bool) {
+    let mut target = target_picker(app, ui, d);
+    ui.add_space(4.0);
+    let mut table = s(d, "table");
+    ui.label(tr(app, "Table name (schema.table)"));
+    ui.add(egui::TextEdit::singleline(&mut table).desired_width(380.0).hint_text("dbo.Sales"));
+    let mut mode = d.values.get("mode").and_then(Json::as_str).unwrap_or("create").to_string();
+    ui.horizontal(|ui| {
+        ui.radio_value(&mut mode, "create".to_string(), tr(app, "New table"));
+        ui.radio_value(&mut mode, "append".to_string(), tr(app, "Add rows"));
+        ui.radio_value(&mut mode, "replace".to_string(), tr(app, "Replace all rows"));
+    });
+    let mut range = s(d, "range");
+    ui.label(tr(app, "Range (blank: the table or region at the active cell)"));
+    ui.add(egui::TextEdit::singleline(&mut range).desired_width(380.0));
+    if s(d, "table") != table || d.values.get("mode").and_then(Json::as_str) != Some(mode.as_str()) || s(d, "range") != range {
+        set(d, "plan", Json::Null);
+    }
+    set(d, "table", json!(table));
+    set(d, "mode", json!(mode));
+    set(d, "range", json!(range));
+    target["table"] = json!(table.trim());
+    target["mode"] = json!(mode);
+    if !range.trim().is_empty() {
+        target["range"] = json!(range.trim());
+    }
+    if let Some(plan) = d.values.get("plan").filter(|x| !x.is_null()).cloned() {
+        ui.separator();
+        ui.label(format!("{} {} → {}", plan["rows"], tr(app, "rows"), plan["table"].as_str().unwrap_or("")));
+        let cols: Vec<String> = plan["columns"]
+            .as_array()
+            .map(|a| a.iter().map(|c| format!("{} ({})", c["name"].as_str().unwrap_or(""), c["kind"].as_str().unwrap_or(""))).collect())
+            .unwrap_or_default();
+        ui.label(RichText::new(cols.join(", ")).small());
+        if mode == "replace" {
+            ui.label(RichText::new(tr(app, "Every row now in the table is deleted first.")).color(Color32::from_rgb(0xC4, 0x2B, 0x1C)));
+        }
+    }
+    error_label(ui, d);
+    ui.add_space(8.0);
+    button_row(ui, |ui| {
+        if secondary(ui, tr(app, "Cancel")) {
+            *open = false;
+        }
+        let planned = d.values.get("plan").is_some_and(|x| !x.is_null());
+        if planned {
+            if primary(ui, tr(app, "Export"))
+                && let Some(v) = write(app, d, "data.exportToSqlServer", target.clone(), open)
+            {
+                *open = false;
+                app.toast = Some((format!("{} {} {}", v["rows"], tr(app, "rows exported to"), v["table"].as_str().unwrap_or("")), crate::now_ms()));
+            }
+        } else if primary(ui, tr(app, "Preview")) {
+            let mut dry = target.clone();
+            dry["dryRun"] = json!(true);
+            if let Some(v) = write(app, d, "data.exportToSqlServer", dry, open) {
+                set(d, "plan", v);
+            }
+        }
+    });
+}
+
+/// Run SQL: target, statement, optional cells for @P1…; asks before running.
+pub fn run_sql(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut bool) {
+    let mut target = target_picker(app, ui, d);
+    ui.add_space(4.0);
+    let mut sql = s(d, "sql");
+    ui.label(tr(app, "SQL statement"));
+    ui.add(
+        egui::TextEdit::multiline(&mut sql)
+            .code_editor()
+            .desired_rows(6)
+            .desired_width(f32::INFINITY)
+            .hint_text("UPDATE dbo.Prices SET Price = @P1 WHERE Code = @P2"),
+    );
+    let mut cells = s(d, "cells");
+    ui.label(tr(app, "Cells for @P1, @P2… (optional, for example B2, C2)"));
+    ui.add(egui::TextEdit::singleline(&mut cells).desired_width(380.0));
+    if s(d, "sql") != sql || s(d, "cells") != cells {
+        set(d, "confirm", json!(false));
+    }
+    set(d, "sql", json!(sql));
+    set(d, "cells", json!(cells));
+    target["sql"] = json!(sql);
+    let refs: Vec<String> = cells.split([',', ';', ' ']).map(str::trim).filter(|x| !x.is_empty()).map(str::to_string).collect();
+    if !refs.is_empty() {
+        target["cells"] = json!(refs);
+    }
+    let confirming = b(d, "confirm", false);
+    if confirming {
+        ui.label(RichText::new(tr(app, "This runs on the server in one transaction and can't be undone from GridCraft. Run it?")).strong());
+    }
+    error_label(ui, d);
+    ui.add_space(8.0);
+    button_row(ui, |ui| {
+        if secondary(ui, tr(app, "Cancel")) {
+            *open = false;
+        }
+        if confirming {
+            if primary(ui, tr(app, "Run"))
+                && let Some(v) = write(app, d, "data.sqlExecute", target.clone(), open)
+            {
+                *open = false;
+                app.toast = Some((format!("{} {}", v["rowsAffected"], tr(app, "rows affected.")), crate::now_ms()));
+            }
+        } else if ui.add_enabled_ui(!sql.trim().is_empty(), |ui| primary(ui, tr(app, "Run…"))).inner {
+            set(d, "confirm", json!(true));
+        }
+    });
 }

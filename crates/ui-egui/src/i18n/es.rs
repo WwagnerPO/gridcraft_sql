@@ -494,6 +494,40 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "queries" => "consultas",
         "Last refreshed" => "Última actualización",
         "Properties…" => "Propiedades…",
+        // Writing to a database
+        "Write to a database" => "Escribir en una base de datos",
+        "Save Changes to Database…" => "Guardar cambios en la base de datos…",
+        "Export to SQL Server…" => "Exportar a SQL Server…",
+        "Run SQL…" => "Ejecutar SQL…",
+        "Save Changes to Database" => "Guardar cambios en la base de datos",
+        "Export to SQL Server" => "Exportar a SQL Server",
+        "Run SQL" => "Ejecutar SQL",
+        "Another server…" => "Otro servidor…",
+        "Rows to add" => "Filas que se añadirán",
+        "Rows to change" => "Filas que se modificarán",
+        "Rows to delete" => "Filas que se eliminarán",
+        "Nothing has changed since the last refresh." => "No ha cambiado nada desde la última actualización.",
+        "Everything is sent in one transaction: all of it or nothing. Undo in GridCraft doesn't undo it on the server." => {
+            "Todo se envía en una sola transacción: todo o nada. Deshacer en GridCraft no lo deshace en el servidor."
+        }
+        "rows saved to the database." => "filas guardadas en la base de datos.",
+        "Table name (schema.table)" => "Nombre de la tabla (esquema.tabla)",
+        "New table" => "Tabla nueva",
+        "Add rows" => "Añadir filas",
+        "Replace all rows" => "Reemplazar todas las filas",
+        "Range (blank: the table or region at the active cell)" => "Rango (vacío: la tabla o región de la celda activa)",
+        "rows" => "filas",
+        "Every row now in the table is deleted first." => "Primero se eliminan todas las filas que hay ahora en la tabla.",
+        "rows exported to" => "filas exportadas a",
+        "Preview" => "Vista previa",
+        "SQL statement" => "Instrucción SQL",
+        "Cells for @P1, @P2… (optional, for example B2, C2)" => "Celdas para @P1, @P2… (opcional, por ejemplo B2, C2)",
+        "This runs on the server in one transaction and can't be undone from GridCraft. Run it?" => {
+            "Se ejecuta en el servidor en una sola transacción y no se puede deshacer desde GridCraft. ¿Ejecutar?"
+        }
+        "Run" => "Ejecutar",
+        "rows affected." => "filas afectadas.",
+        "Save changes…" => "Guardar cambios…",
         _ => return None,
     })
 }
