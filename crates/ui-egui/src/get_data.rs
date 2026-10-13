@@ -94,8 +94,29 @@ fn connect(app: &mut SheetApp, d: &mut Dialog) {
         Err(e) if e.contains(ENCRYPTION_FAILED) => {
             set(d, "encryptionFailed", json!(true));
             set(d, "error", json!(message(&e)));
+            // The offer to trust the certificate shows on the step the user is on.
         }
         Err(e) => set(d, "error", json!(message(&e))),
+    }
+}
+
+/// After a failed TLS handshake: offer to trust the server's certificate and connect again.
+/// SQL Server checks the certificate even for an unencrypted connection (the login is always
+/// encrypted), so trusting it is the way through for an expired or self-signed one.
+fn certificate_help(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog) {
+    if !b(d, "encryptionFailed", false) || b(d, "trust", false) {
+        return;
+    }
+    ui.add_space(4.0);
+    ui.label(tr(app, "You can trust this server's certificate (only on a network you trust), or ask the server's administrator to renew it."));
+    if primary(ui, tr(app, "Trust the certificate and connect")) {
+        set(d, "trust", json!(true));
+        set(d, "encryptionFailed", json!(false));
+        if s(d, "stage") == "credentials" && !s(d, "password").is_empty() {
+            let (server, user, password) = (s(d, "server"), s(d, "user"), s(d, "password"));
+            let _ = app.run("data.dataSourceSettings", json!({"server": server.trim(), "user": user.trim(), "password": password}));
+        }
+        connect(app, d);
     }
 }
 
@@ -136,14 +157,7 @@ fn source_step(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut bool)
     set(d, "encrypt", json!(encrypt));
     set(d, "trust", json!(trust));
     error_label(ui, d);
-    if b(d, "encryptionFailed", false) && encrypt {
-        ui.label(tr(app, "The server may not support encryption, or its certificate isn't trusted. You can connect without encryption, or trust the certificate under Advanced options."));
-        if ui.button(tr(app, "Connect without encryption")).clicked() {
-            set(d, "encrypt", json!(false));
-            set(d, "encryptionFailed", json!(false));
-            connect(app, d);
-        }
-    }
+    certificate_help(app, ui, d);
     ui.add_space(8.0);
     button_row(ui, |ui| {
         if secondary(ui, tr(app, "Cancel")) {
@@ -184,6 +198,7 @@ fn credentials(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut bool)
     set(d, "password", json!(password));
     set(d, "showPassword", json!(show));
     error_label(ui, d);
+    certificate_help(app, ui, d);
     ui.add_space(8.0);
     let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
     ui.horizontal(|ui| {

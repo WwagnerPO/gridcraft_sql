@@ -185,3 +185,48 @@ fn a_sql_statement_shows_its_preview() {
     assert_eq!(d.wb.connections[0].name, "Query1");
     assert!(matches!(d.wb.connections[0].command, QueryCommand::Sql { .. }));
 }
+
+/// A server whose certificate has expired: refused until the user trusts it.
+struct ExpiredCert;
+
+impl DataProvider for ExpiredCert {
+    fn databases(&self, s: &DataSource, c: &Credential) -> Result<Vec<String>, DbError> {
+        let DataSource::SqlServer { trust_server_certificate, .. } = s;
+        if !trust_server_certificate {
+            return Err(DbError::Encryption("The server's certificate expired on 2026-03-11.".into()));
+        }
+        FakeDb::login(c)?;
+        Ok(vec!["Shop".into()])
+    }
+    fn objects(&self, s: &DataSource, c: &Credential) -> Result<Vec<DbObject>, DbError> {
+        self.databases(s, c).map(|_| vec![])
+    }
+    fn query(&self, s: &DataSource, c: &Credential, _: &QueryCommand, _: usize) -> Result<QueryResult, DbError> {
+        self.databases(s, c).map(|_| QueryResult::default())
+    }
+}
+
+#[test]
+fn an_expired_certificate_can_be_trusted() {
+    let mut session = Session::new();
+    session.new_workbook();
+    session.set_data_provider(Arc::new(ExpiredCert));
+    session.set_credential("old.example", Credential { user: "reader".into(), password: "pw".into() });
+    let mut h = egui_kittest::Harness::builder().with_step_dt(1.0 / 60.0).with_size(vec2(1200.0, 800.0)).build_ui_state(
+        |ui, app: &mut SheetApp| {
+            app.logic(ui.ctx());
+            app.ui(ui);
+        },
+        SheetApp::new(session, Default::default()),
+    );
+    h.state_mut().open_dialog("sqlServer", json!({"server": "old.example"}));
+    settle(&mut h);
+    h.get_by_label("OK").click();
+    settle(&mut h);
+    let err = h.state().dialog.as_ref().and_then(|d| d.values.get("error").cloned()).unwrap_or(Json::Null);
+    assert!(err.as_str().unwrap_or("").contains("expired on 2026-03-11"), "{err}");
+    h.get_by_label("Trust the certificate and connect").click();
+    settle(&mut h);
+    assert_eq!(stage(&h), "navigator");
+    assert_eq!(h.state().dialog.as_ref().unwrap().values["trust"], true);
+}

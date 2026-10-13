@@ -37,7 +37,7 @@ fn map_error(server: &str, e: tiberius::error::Error) -> DbError {
     match e {
         E::Server(t) if LOGIN_ERRORS.contains(&t.code()) => DbError::Credentials(t.message().to_string()),
         E::Server(t) => DbError::Other(t.message().to_string()),
-        E::Tls(m) => DbError::Encryption(m),
+        E::Tls(m) => DbError::Encryption(convert::tls_message(&m)),
         E::Io { message, .. } => DbError::Other(format!("Couldn't reach the server `{server}`: {message}")),
         other => DbError::Other(other.to_string()),
     }

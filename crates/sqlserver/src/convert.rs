@@ -97,6 +97,27 @@ pub fn iso_date(days: i64) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+/// A plain-language reason for a failed TLS handshake (the driver's text is meant for developers).
+pub fn tls_message(raw: &str) -> String {
+    let lower = raw.to_lowercase();
+    if lower.contains("certificate expired") || lower.contains("expired") {
+        let after =
+            lower.split("not valid after").nth(1).and_then(|t| t.trim_start().split(|c: char| !c.is_ascii_digit()).next()?.parse::<i64>().ok());
+        return match after {
+            Some(secs) => format!("The server's certificate expired on {}.", iso_date(secs.div_euclid(86_400) + 719_162)),
+            None => "The server's certificate has expired.".into(),
+        };
+    }
+    if lower.contains("notvalidforname") || lower.contains("not valid for name") || lower.contains("hostname") {
+        return "The server's certificate was issued for a different server name.".into();
+    }
+    if lower.contains("unknownissuer") || lower.contains("unknown issuer") || lower.contains("self-signed") || lower.contains("self signed") {
+        return "The server's certificate isn't signed by an authority this computer trusts (it may be self-signed).".into();
+    }
+    let first: String = raw.lines().next().unwrap_or("").chars().take(200).collect();
+    format!("The secure (TLS) handshake with the server failed: {first}")
+}
+
 /// `[name]` with `]` doubled: a safe identifier in a statement.
 pub fn quote_identifier(name: &str) -> String {
     format!("[{}]", name.replace(']', "]]"))
@@ -150,6 +171,15 @@ mod tests {
         assert_eq!(iso_date(0), "0001-01-01");
         assert_eq!(iso_date(DAYS_TO_1900 - 1), "1899-12-31");
         assert_eq!(iso_date(DAYS_TO_1900 + 59), "1900-03-01");
+    }
+
+    #[test]
+    fn tls_messages() {
+        let raw = "the server's certificate was rejected during the TLS handshake: certificate expired: verification time 1791899043 (UNIX), but certificate is not valid after 1773187200 (18711843 seconds ago). To connect anyway you can: (1) trust…";
+        assert_eq!(tls_message(raw), "The server's certificate expired on 2026-03-11.");
+        assert!(tls_message("invalid peer certificate: UnknownIssuer").contains("self-signed"));
+        assert!(tls_message("invalid peer certificate: NotValidForName").contains("different server name"));
+        assert!(tls_message("boom").ends_with("boom"));
     }
 
     #[test]

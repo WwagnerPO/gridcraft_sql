@@ -460,10 +460,10 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "SQL statement (optional, requires database)" => "Instrucción SQL (opcional, requiere base de datos)",
         "Encrypt connection" => "Cifrar conexión",
         "Trust the server certificate" => "Confiar en el certificado del servidor",
-        "The server may not support encryption, or its certificate isn't trusted. You can connect without encryption, or trust the certificate under Advanced options." => {
-            "Puede que el servidor no admita el cifrado o que su certificado no sea de confianza. Puede conectarse sin cifrado, o confiar en el certificado en Opciones avanzadas."
+        "You can trust this server's certificate (only on a network you trust), or ask the server's administrator to renew it." => {
+            "Puede confiar en el certificado de este servidor (solo en una red de confianza) o pedir al administrador del servidor que lo renueve."
         }
-        "Connect without encryption" => "Conectar sin cifrado",
+        "Trust the certificate and connect" => "Confiar en el certificado y conectar",
         "OK" => "Aceptar",
         "Cancel" => "Cancelar",
         "Enter a server name." => "Escriba el nombre de un servidor.",

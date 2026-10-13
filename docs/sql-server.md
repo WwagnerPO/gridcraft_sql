@@ -15,8 +15,10 @@ connect; the web version can't (browsers have no sockets) and says so.
    Under **Advanced options**: a **SQL statement** (needs a database), **Encrypt connection** (on by
    default) and **Trust the server certificate** (for a local server with a self-signed
    certificate).
-3. Sign in with a **SQL Server login** (user name and password). If encryption can't be set up,
-   the dialog offers to connect without it.
+3. Sign in with a **SQL Server login** (user name and password). If the server's certificate is
+   refused (expired, self-signed, issued for another name), the dialog says why and offers
+   **Trust the certificate and connect**. SQL Server checks the certificate even for an
+   unencrypted connection, since the login itself is always encrypted.
 4. In the **Navigator**, pick a database if you didn't name one, search the tables and views, click
    one to preview its first rows, tick **Select multiple items** to load several, then **Load**.
    With a SQL statement, the preview of its result shows instead.
