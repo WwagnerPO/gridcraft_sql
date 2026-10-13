@@ -21,7 +21,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "From SQL Server Database",
             ["Data", "Get & Transform Data", "Get Data", "From Database"],
             None,
-            "{server: \"host\" | \"host,port\" | \"host\\\\instance\", database?, table?: \"dbo.Customers\" | tables?: [...] | sql?: \"SELECT …\" (needs database), user?, password? (kept for the session, never saved), encrypt?: true, trustServerCertificate?: false, name?: query name} → loads each into a new sheet as a table bound to a connection → {loaded: [{sheet, table, connection, rows, cols, truncated}]}",
+            "{server: \"host\" | \"host,port\" | \"host\\\\instance\", database?, auth?: sql (default) | windows (user DOMAIN\\\\name + password) | integrated (the current Windows user), table?: \"dbo.Customers\" | tables?: [...] | sql?: \"SELECT …\" (needs database), user?, password? (kept for the session, never saved), encrypt?: true, trustServerCertificate?: false, name?: query name} → loads each into a new sheet as a table bound to a connection → {loaded: [{sheet, table, connection, rows, cols, truncated}]}",
             has_doc,
             from_sql_server
         ),
@@ -106,16 +106,30 @@ pub(crate) fn source_param(cmd: &str, p: &Json) -> Result<DataSource> {
         database: database.to_string(),
         encrypt: bool_param(p, "encrypt").unwrap_or(true),
         trust_server_certificate: bool_param(p, "trustServerCertificate").unwrap_or(false),
+        auth: match str_param(p, "auth").map(str::to_ascii_lowercase).as_deref() {
+            None | Some("sql") | Some("database") => SqlAuth::Sql,
+            Some("windows") => SqlAuth::Windows,
+            Some("integrated") | Some("current") => SqlAuth::Integrated,
+            Some(other) => return Err(bad(cmd, format!("`auth` is sql, windows or integrated, not `{other}`"))),
+        },
     })
 }
 
 /// Stores `user`/`password` when given, then returns the session's login for the source's server.
+/// The login a source signs in with: none needed as the current Windows user, else the
+/// session's for its server.
+pub(crate) fn login_for(s: &Session, source: &DataSource) -> Option<Credential> {
+    if source.auth() == SqlAuth::Integrated {
+        return Some(Credential { user: String::new(), password: String::new() });
+    }
+    s.credential(source.server()).cloned()
+}
+
 pub(crate) fn credential_for(s: &mut Session, source: &DataSource, p: &Json) -> Result<Credential> {
     if let (Some(user), Some(password)) = (str_param(p, "user"), str_param(p, "password")) {
         s.set_credential(source.server(), Credential { user: user.to_string(), password: password.to_string() });
     }
-    s.credential(source.server())
-        .cloned()
+    login_for(s, source)
         .ok_or_else(|| EngineError::Other(format!("{} No login is stored for server `{}`.", datasource::CREDENTIALS_REQUIRED, source.server())))
 }
 
@@ -509,7 +523,7 @@ pub(crate) fn refresh_one(s: &mut Session, ci: usize) -> Result<Json> {
     let (si, ti) =
         s.doc()?.wb.table(&conn.table).ok_or_else(|| EngineError::Other(format!("The table `{}` of query `{}` is gone.", conn.table, conn.name)))?;
     let provider = provider(s)?;
-    let credential = s.credential(conn.source.server()).cloned().ok_or_else(|| {
+    let credential = login_for(s, &conn.source).ok_or_else(|| {
         EngineError::Other(format!("{} No login is stored for server `{}`.", datasource::CREDENTIALS_REQUIRED, conn.source.server()))
     })?;
     let r = fit(provider.query(&conn.source, &credential, &conn.command, datasource::MAX_ROWS + 1).map_err(db_error)?);
@@ -914,6 +928,36 @@ mod tests {
         s2.set_credential("db.local", Credential { user: "sa".into(), password: "secret".into() });
         let r = s2.execute("data.refreshAll", json!({})).unwrap();
         assert_eq!(r["refreshed"], 1, "{r}");
+    }
+
+    #[test]
+    fn the_current_windows_user_needs_no_password() {
+        // The fake only checks the password of SQL logins it's given; integrated sign-in sends none.
+        struct Windows;
+        impl DataProvider for Windows {
+            fn databases(&self, s: &DataSource, _: &Credential) -> std::result::Result<Vec<String>, DbError> {
+                if s.auth() == SqlAuth::Integrated { Ok(vec!["Shop".into()]) } else { Err(DbError::Credentials("no".into())) }
+            }
+            fn objects(&self, _: &DataSource, _: &Credential) -> std::result::Result<Vec<DbObject>, DbError> {
+                Ok(vec![])
+            }
+            fn query(&self, s: &DataSource, c: &Credential, _: &QueryCommand, _: usize) -> std::result::Result<QueryResult, DbError> {
+                self.databases(s, c)?;
+                Ok(QueryResult { columns: vec!["a".into()], rows: vec![vec![DbValue::Number(1.0)]], truncated: false })
+            }
+        }
+        let mut s = Session::new();
+        s.execute("file.new", json!({})).unwrap();
+        s.set_data_provider(Arc::new(Windows));
+        let r = s.execute("data.sqlServerNavigator", json!({"server": "corp-sql", "auth": "integrated"})).unwrap();
+        assert_eq!(r["databases"][0], "Shop");
+        s.execute("data.fromSqlServer", json!({"server": "corp-sql", "database": "Shop", "table": "dbo.T", "auth": "integrated"})).unwrap();
+        // Refresh needs no stored login either, and the file keeps the way of signing in.
+        s.execute("data.refreshAll", json!({})).unwrap();
+        let bytes = gridcraft_xlsx::write_xlsx(&s.doc().unwrap().wb).unwrap();
+        let (wb, _) = gridcraft_xlsx::read_xlsx(&bytes).unwrap();
+        assert_eq!(wb.connections[0].source.auth(), SqlAuth::Integrated);
+        assert!(s.execute("data.sqlServerNavigator", json!({"server": "x", "auth": "kerberos"})).is_err());
     }
 
     #[test]

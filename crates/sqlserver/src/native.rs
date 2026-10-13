@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use futures_util::TryStreamExt;
 use gridcraft_engine::datasource::{self, Credential, DataProvider, DbColumn, DbError, DbObject, DbValue, QueryResult, Statement};
-use gridcraft_engine::model::{DataSource, QueryCommand};
+use gridcraft_engine::model::{DataSource, QueryCommand, SqlAuth};
 use tiberius::{AuthMethod, Client, ColumnData, Config, EncryptionLevel, QueryItem};
 use tokio::net::TcpStream;
 use tokio_util::compat::{Compat, TokioAsyncWriteCompatExt};
@@ -45,7 +45,7 @@ fn map_error(server: &str, e: tiberius::error::Error) -> DbError {
 
 impl SqlServerProvider {
     fn config(&self, source: &DataSource, credential: &Credential, write: bool) -> Result<Config, DbError> {
-        let DataSource::SqlServer { server, database, encrypt, trust_server_certificate } = source;
+        let DataSource::SqlServer { server, database, encrypt, trust_server_certificate, auth } = source;
         let addr = convert::parse_server(server).map_err(DbError::Other)?;
         let mut c = Config::new();
         c.host(&addr.host);
@@ -59,7 +59,18 @@ impl SqlServerProvider {
             c.database(database);
         }
         c.application_name("GridCraft");
-        c.authentication(AuthMethod::sql_server(&credential.user, &credential.password));
+        c.authentication(match auth {
+            SqlAuth::Sql => AuthMethod::sql_server(&credential.user, &credential.password),
+            // Windows sign-in goes through SSPI (NTLM or Kerberos), which only Windows has.
+            #[cfg(windows)]
+            SqlAuth::Windows => AuthMethod::windows(&credential.user, &credential.password),
+            #[cfg(windows)]
+            SqlAuth::Integrated => AuthMethod::Integrated,
+            #[cfg(not(windows))]
+            SqlAuth::Windows | SqlAuth::Integrated => {
+                return Err(DbError::Other("Windows sign-in works in GridCraft for Windows. Here, sign in with a SQL Server login.".into()));
+            }
+        });
         // Off still encrypts the login itself whenever the server offers TLS.
         c.encryption(if *encrypt { EncryptionLevel::Required } else { EncryptionLevel::Off });
         if *trust_server_certificate {
@@ -408,7 +419,13 @@ mod tests {
     #[test]
     fn unreachable_server_is_an_error() {
         let p = SqlServerProvider { connect_timeout: Duration::from_secs(2), command_timeout: Duration::from_secs(2) };
-        let source = DataSource::SqlServer { server: "127.0.0.1,9".into(), database: String::new(), encrypt: true, trust_server_certificate: false };
+        let source = DataSource::SqlServer {
+            server: "127.0.0.1,9".into(),
+            database: String::new(),
+            encrypt: true,
+            trust_server_certificate: false,
+            auth: SqlAuth::Sql,
+        };
         let c = Credential { user: "sa".into(), password: "x".into() };
         let e = p.databases(&source, &c).unwrap_err();
         assert!(matches!(e, DbError::Other(_)), "{e:?}");
@@ -423,7 +440,13 @@ mod tests {
         let (Some(server), Some(user), Some(password)) = (parts.next(), parts.next(), parts.next()) else { return };
         let p = SqlServerProvider::default();
         let c = Credential { user: user.into(), password: password.into() };
-        let source = DataSource::SqlServer { server: server.into(), database: "master".into(), encrypt: true, trust_server_certificate: true };
+        let source = DataSource::SqlServer {
+            server: server.into(),
+            database: "master".into(),
+            encrypt: true,
+            trust_server_certificate: true,
+            auth: SqlAuth::Sql,
+        };
         let dbs = p.databases(&source, &c).unwrap();
         assert!(dbs.iter().any(|d| d == "master"), "{dbs:?}");
         let sql = "SELECT CAST(1 AS int) AS n, N'ñ' AS t, CAST('2023-03-15T12:00:00' AS datetime2) AS d, CAST(NULL AS int) AS z, CAST(1.25 AS decimal(9,2)) AS m";

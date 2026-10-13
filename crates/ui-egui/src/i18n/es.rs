@@ -469,10 +469,6 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Enter a server name." => "Escriba el nombre de un servidor.",
         "A SQL statement needs a database." => "Una instrucción SQL necesita una base de datos.",
         "Sign in to" => "Iniciar sesión en",
-        "Use a SQL Server login. GridCraft keeps it for this session and never saves it in the workbook." => {
-            "Use un inicio de sesión de SQL Server. GridCraft lo guarda durante esta sesión y nunca lo guarda en el libro."
-        }
-        "User name" => "Nombre de usuario",
         "Password" => "Contraseña",
         "Show password" => "Mostrar contraseña",
         "Connect" => "Conectar",
@@ -528,6 +524,16 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Run" => "Ejecutar",
         "rows affected." => "filas afectadas.",
         "Save changes…" => "Guardar cambios…",
+        "User name" => "Nombre de usuario",
+        "SQL Server login" => "Inicio de sesión de SQL Server",
+        "Windows (another account)" => "Windows (otra cuenta)",
+        "Windows (current user)" => "Windows (usuario actual)",
+        "GridCraft signs in as the Windows account you're using; no password is asked." => {
+            "GridCraft inicia sesión con la cuenta de Windows que está usando; no se pide contraseña."
+        }
+        "GridCraft keeps the login for this session and never saves it in the workbook." => {
+            "GridCraft guarda el inicio de sesión durante esta sesión y nunca lo guarda en el libro."
+        }
         _ => return None,
     })
 }

@@ -15,7 +15,8 @@ connect; the web version can't (browsers have no sockets) and says so.
    Under **Advanced options**: a **SQL statement** (needs a database), **Encrypt connection** (on by
    default) and **Trust the server certificate** (for a local server with a self-signed
    certificate).
-3. Sign in with a **SQL Server login** (user name and password). If the server's certificate is
+3. Sign in with a **SQL Server login** (user name and password) or, on Windows, as **Windows
+   (current user)** or **Windows (another account)**. If the server's certificate is
    refused (expired, self-signed, issued for another name), the dialog says why and offers
    **Trust the certificate and connect**. SQL Server checks the certificate even for an
    unencrypted connection, since the login itself is always encrypted.
@@ -98,8 +99,9 @@ gridcraft-cli run --in customers.xlsx --cmd 'data.dataSourceSettings={"server":"
 
 ## Limits
 
-- **Sign-in:** SQL Server logins only. Windows (integrated) and Microsoft Entra sign-in are not
-  supported yet.
+- **Sign-in:** SQL Server logins everywhere; in GridCraft for Windows also **Windows (current
+  user)**, with no password, and **Windows (another account)** (`DOMAIN\name` and password), both
+  through SSPI. Microsoft Entra sign-in is not supported yet.
 - **Reading** opens the connection read-intent; only the Database menu's commands write.
 - **Size:** at most 1,048,575 rows and 50 million cells per query; larger results load the first
   rows and say so. Text is cut at 32,767 characters, binary columns load as `0x…` hex text.

@@ -55,7 +55,27 @@ fn source(d: &Dialog) -> Json {
         "database": s(d, "database").trim(),
         "encrypt": b(d, "encrypt", true),
         "trustServerCertificate": b(d, "trust", false),
+        "auth": auth(d),
     })
+}
+
+/// How the dialog signs in: `sql` (default), `windows` or `integrated`.
+fn auth(d: &Dialog) -> String {
+    match s(d, "auth").as_str() {
+        a @ ("windows" | "integrated") => a.to_string(),
+        _ => "sql".to_string(),
+    }
+}
+
+/// The sign-in choices, as Excel's Windows / Database tabs.
+fn auth_choice(app: &SheetApp, ui: &mut Ui, d: &mut Dialog) {
+    let mut a = auth(d);
+    ui.horizontal_wrapped(|ui| {
+        ui.radio_value(&mut a, "sql".to_string(), tr(app, "SQL Server login"));
+        ui.radio_value(&mut a, "windows".to_string(), tr(app, "Windows (another account)"));
+        ui.radio_value(&mut a, "integrated".to_string(), tr(app, "Windows (current user)"));
+    });
+    set(d, "auth", json!(a));
 }
 
 /// The message of an engine error, without the command prefix.
@@ -178,12 +198,27 @@ fn source_step(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut bool)
 fn credentials(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut bool) {
     let server = s(d, "server");
     ui.label(RichText::new(format!("{} {}", tr(app, "Sign in to"), server.trim())).strong());
-    ui.label(tr(app, "Use a SQL Server login. GridCraft keeps it for this session and never saves it in the workbook."));
+    // A refresh or write asking again keeps the connection's way of signing in.
+    if s(d, "retry").is_empty() {
+        auth_choice(app, ui, d);
+    }
+    let integrated = auth(d) == "integrated";
+    ui.label(tr(
+        app,
+        if integrated {
+            "GridCraft signs in as the Windows account you're using; no password is asked."
+        } else {
+            "GridCraft keeps the login for this session and never saves it in the workbook."
+        },
+    ));
     ui.add_space(6.0);
     let mut user = s(d, "user");
     let mut password = s(d, "password");
     let mut show = b(d, "showPassword", false);
     egui::Grid::new("sql_login").num_columns(2).spacing(vec2(8.0, 6.0)).show(ui, |ui| {
+        if integrated {
+            return;
+        }
         ui.label(tr(app, "User name"));
         ui.add(egui::TextEdit::singleline(&mut user).desired_width(220.0));
         ui.end_row();
@@ -212,8 +247,11 @@ fn credentials(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut bool)
             if secondary(ui, tr(app, "Cancel")) {
                 *open = false;
             }
-            if (primary(ui, tr(app, "Connect")) || enter) && !user.trim().is_empty() {
-                if let Err(e) = app.run("data.dataSourceSettings", json!({"server": server.trim(), "user": user.trim(), "password": password})) {
+            if (primary(ui, tr(app, "Connect")) || enter) && (integrated || !user.trim().is_empty()) {
+                if integrated {
+                    // Nothing to keep: the Windows session is the login.
+                } else if let Err(e) = app.run("data.dataSourceSettings", json!({"server": server.trim(), "user": user.trim(), "password": password}))
+                {
                     set(d, "error", json!(message(&e)));
                     return;
                 }
@@ -498,7 +536,7 @@ fn servers_for(app: &SheetApp, id: &str, params: &Json) -> Vec<String> {
         conns.iter().filter(|c| table.as_deref().is_some_and(|t| c.table.eq_ignore_ascii_case(t))).collect()
     };
     let mut out: Vec<String> = vec![];
-    for c in pick {
+    for c in pick.into_iter().filter(|c| c.source.auth() != gridcraft_engine::model::SqlAuth::Integrated) {
         let s = c.source.server().to_string();
         if !out.iter().any(|x| x.eq_ignore_ascii_case(&s)) {
             out.push(s);
@@ -708,10 +746,11 @@ fn target_picker(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog) -> Json {
             ui.end_row();
         });
         ui.checkbox(&mut trust, tr(app, "Trust the server certificate"));
+        auth_choice(app, ui, d);
         set(d, "server", json!(server));
         set(d, "database", json!(database));
         set(d, "trust", json!(trust));
-        json!({"server": server.trim(), "database": database.trim(), "trustServerCertificate": trust})
+        json!({"server": server.trim(), "database": database.trim(), "trustServerCertificate": trust, "auth": auth(d)})
     } else {
         json!({"connection": pick})
     }

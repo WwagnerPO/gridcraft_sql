@@ -17,7 +17,7 @@ pub mod style;
 pub mod workbook;
 
 pub use cell::{Cell, CellPicture, Formula};
-pub use connection::{Connection, DataSource, QueryCommand};
+pub use connection::{Connection, DataSource, QueryCommand, SqlAuth};
 pub use features::*;
 pub use password::PasswordHash;
 pub use preserved::{Preserved, PreservedPart, PreservedRel, PreservedSheet, PreservedXml};

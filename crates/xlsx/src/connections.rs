@@ -8,7 +8,7 @@
 
 use std::fmt::Write as _;
 
-use gridcraft_model::{Connection, DataSource, QueryCommand, Workbook};
+use gridcraft_model::{Connection, DataSource, QueryCommand, SqlAuth, Workbook};
 
 use crate::xml::{El, esc_attr};
 
@@ -30,9 +30,11 @@ fn quote_value(v: &str) -> String {
 
 /// The OLE DB connection string of a connection. Never holds a password.
 pub fn connection_string(c: &Connection) -> String {
-    let DataSource::SqlServer { server, database, encrypt, trust_server_certificate } = &c.source;
+    let DataSource::SqlServer { server, database, encrypt, trust_server_certificate, auth } = &c.source;
     let mut s = String::from("Provider=SQLOLEDB.1;Persist Security Info=False");
-    if !c.user.is_empty() {
+    if *auth == SqlAuth::Integrated {
+        s.push_str(";Integrated Security=SSPI");
+    } else if !c.user.is_empty() {
         let _ = write!(s, ";User ID={}", quote_value(&c.user));
     }
     if !database.is_empty() {
@@ -272,10 +274,8 @@ pub fn read(x: &El, query_tables: &[(String, u32)]) -> Option<Vec<Connection>> {
         if !(provider.starts_with("sqloledb") || provider.starts_with("msoledbsql") || provider.starts_with("sqlncli")) {
             return None;
         }
-        // Windows sign-in isn't modelled.
-        if get("integrated security").is_some_and(truthy) || get("trusted_connection").is_some_and(truthy) {
-            return None;
-        }
+        let integrated = get("integrated security").is_some_and(truthy) || get("trusted_connection").is_some_and(truthy);
+        let user = get("user id").or_else(|| get("uid")).unwrap_or("").to_string();
         let server = get("data source").or_else(|| get("server")).filter(|v| !v.trim().is_empty())?.trim().to_string();
         let database = get("initial catalog").or_else(|| get("database")).unwrap_or("").trim().to_string();
         let text = db.attr("command").unwrap_or("");
@@ -302,8 +302,16 @@ pub fn read(x: &El, query_tables: &[(String, u32)]) -> Option<Vec<Connection>> {
                 database,
                 encrypt: get("use encryption for data").or_else(|| get("encrypt")).is_some_and(truthy),
                 trust_server_certificate: get("trust server certificate").or_else(|| get("trustservercertificate")).is_some_and(truthy),
+                // A `DOMAIN\name` login signs in to Windows; SQL Server logins have no backslash.
+                auth: if integrated {
+                    SqlAuth::Integrated
+                } else if user.contains('\\') {
+                    SqlAuth::Windows
+                } else {
+                    SqlAuth::Sql
+                },
             },
-            user: get("user id").or_else(|| get("uid")).unwrap_or("").to_string(),
+            user,
             command,
             table,
             refresh_on_open: c.flag("refreshOnLoad", false),
@@ -335,7 +343,13 @@ mod tests {
             id: 1,
             name: "dbo Customers".into(),
             description: String::new(),
-            source: DataSource::SqlServer { server: "db;x".into(), database: "Shop".into(), encrypt: true, trust_server_certificate: true },
+            source: DataSource::SqlServer {
+                server: "db;x".into(),
+                database: "Shop".into(),
+                encrypt: true,
+                trust_server_certificate: true,
+                auth: SqlAuth::Sql,
+            },
             user: "sa".into(),
             command: QueryCommand::Table { schema: "dbo".into(), name: "Order \"Lines\"".into() },
             table: "dbo_Customers".into(),
@@ -395,7 +409,9 @@ mod tests {
         assert!(read(&x, &[("t".into(), 1)]).is_none());
         let windows = r#"<connections xmlns="x"><connection id="1" name="q" type="5"><dbPr connection="Provider=SQLOLEDB.1;Integrated Security=SSPI;Data Source=s" command="SELECT 1" commandType="2"/></connection></connections>"#;
         let x = crate::xml::parse(windows.as_bytes()).unwrap();
-        assert!(read(&x, &[("t".into(), 1)]).is_none());
+        let c = read(&x, &[("t".into(), 1)]).unwrap();
+        assert_eq!(c[0].source.auth(), SqlAuth::Integrated);
+        assert!(connection_string(&c[0]).contains("Integrated Security=SSPI"));
     }
 
     #[test]

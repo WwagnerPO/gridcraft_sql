@@ -25,7 +25,23 @@ pub enum DataSource {
         /// certificate on a local server).
         #[serde(default)]
         trust_server_certificate: bool,
+        /// How to sign in.
+        #[serde(default)]
+        auth: SqlAuth,
     },
+}
+
+/// How a SQL Server connection signs in.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SqlAuth {
+    /// A SQL Server login (user name and password).
+    #[default]
+    Sql,
+    /// A Windows account given by name and password (`DOMAIN\user`).
+    Windows,
+    /// The Windows account the app runs as: no password asked.
+    Integrated,
 }
 
 fn yes() -> bool {
@@ -37,6 +53,11 @@ impl DataSource {
     pub fn server(&self) -> &str {
         match self {
             DataSource::SqlServer { server, .. } => server,
+        }
+    }
+    pub fn auth(&self) -> SqlAuth {
+        match self {
+            DataSource::SqlServer { auth, .. } => *auth,
         }
     }
     pub fn database(&self) -> &str {
