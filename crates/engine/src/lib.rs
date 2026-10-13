@@ -10,6 +10,7 @@ pub mod catalog;
 pub mod cf;
 mod clip_html;
 pub mod cmd;
+pub mod datasource;
 pub mod display;
 pub mod fill;
 pub mod io;
@@ -256,9 +257,43 @@ pub struct Session {
     /// Review › Notes › Show All Notes: every note is displayed. An application display setting
     /// (like Excel's comment indicator option), so it's not saved in the file.
     pub show_all_notes: bool,
+    /// Reaches databases for Get Data › From Database; `None` where the host can't (the web).
+    data_provider: Option<Arc<dyn datasource::DataProvider>>,
+    /// Database logins entered this session, by [`datasource::credential_key`]. Never saved in a
+    /// workbook or the journal.
+    credentials: Vec<(String, datasource::Credential)>,
 }
 
 impl Session {
+    /// Installs the provider the database commands reach servers through.
+    pub fn set_data_provider(&mut self, provider: Arc<dyn datasource::DataProvider>) {
+        self.data_provider = Some(provider);
+    }
+    pub fn data_provider(&self) -> Option<Arc<dyn datasource::DataProvider>> {
+        self.data_provider.clone()
+    }
+    /// Remembers the login for `server` (Data Source Settings), replacing an earlier one.
+    pub fn set_credential(&mut self, server: &str, credential: datasource::Credential) {
+        let key = datasource::credential_key(server);
+        self.credentials.retain(|(k, _)| *k != key);
+        self.credentials.push((key, credential));
+    }
+    pub fn credential(&self, server: &str) -> Option<&datasource::Credential> {
+        let key = datasource::credential_key(server);
+        self.credentials.iter().find(|(k, _)| *k == key).map(|(_, c)| c)
+    }
+    /// Forgets the login for `server`; true if there was one.
+    pub fn clear_credential(&mut self, server: &str) -> bool {
+        let key = datasource::credential_key(server);
+        let n = self.credentials.len();
+        self.credentials.retain(|(k, _)| *k != key);
+        n != self.credentials.len()
+    }
+    /// The servers with a remembered login, and its user name.
+    pub fn credential_servers(&self) -> Vec<(String, String)> {
+        self.credentials.iter().map(|(k, c)| (k.clone(), c.user.clone())).collect()
+    }
+
     pub fn new() -> Session {
         Session::default()
     }
@@ -374,11 +409,13 @@ impl Session {
     pub fn execute_headless(&mut self, id: &str, params: Json) -> Result<Json> {
         let r = self.execute(id, params);
         let requests = self.take_ui_requests();
-        let asked_for_file = requests.iter().any(|q| matches!(q, UiRequest::Dialog(name, _) if name == "open" || name == "saveAs"));
+        let asked_for_file =
+            requests.iter().any(|q| matches!(q, UiRequest::Dialog(name, _) if name == "open" || name == "saveAs" || name == "sqlServer"));
         if r.is_ok() && asked_for_file {
             let what = match id {
                 "file.open" => "`path` or `base64`",
                 "data.getData" | "data.fromTextCsv" => "`path` or `text`",
+                "data.fromSqlServer" => "`server`",
                 _ => "`path`",
             };
             let msg = format!("missing {what}: programmatic calls never open dialogs");

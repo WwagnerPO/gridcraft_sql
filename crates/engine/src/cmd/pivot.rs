@@ -166,7 +166,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Refresh All",
             ["Data", "Queries & Connections"],
             Some("Cmd+Alt+F5"),
-            "{replace?} refreshes every PivotTable → {refreshed, errors}",
+            "{replace?} refreshes every query (database connection), then every PivotTable → {refreshed, errors}",
             has_doc,
             refresh_all
         ),
@@ -1296,9 +1296,11 @@ fn refresh(s: &mut Session, p: &Json) -> Result<Json> {
 
 fn refresh_all(s: &mut Session, p: &Json) -> Result<Json> {
     let replace = bool_param(p, "replace").unwrap_or(false);
+    // Queries first, so PivotTables built on their tables see the new rows.
+    let (queries, query_errors) = super::connections::refresh_connections(s)?;
     edit(s, |cx| {
-        let mut n = 0;
-        let mut errors = vec![];
+        let mut n = queries;
+        let mut errors = query_errors;
         for si in 0..cx.wb.sheets.len() {
             let count = cx.wb.sheet(si).map(|sh| sh.pivots.len()).unwrap_or(0);
             for pi in 0..count {

@@ -1920,17 +1920,15 @@
    "seq": "APNL",
    "kind": "command",
    "target": "data.fromSqlServer",
-   "pending": true,
    "excel": "From SQL Server ODBC",
-   "note": "gap #12; reserved until the command lands"
+   "note": "gap #12: From SQL Server Database"
   },
   {
    "seq": "APNS",
    "kind": "command",
    "target": "data.dataSourceSettings",
-   "pending": true,
    "excel": "Data Source Settings",
-   "note": "gap #12; reserved until the command lands"
+   "note": "gap #12: From SQL Server Database"
   },
   {
    "seq": "APNT",
@@ -1994,9 +1992,8 @@
    "seq": "ARO",
    "kind": "command",
    "target": "data.connectionProperties",
-   "pending": true,
    "excel": "Connection Properties",
-   "note": "gap #12; reserved until the command lands"
+   "note": "gap #12: From SQL Server Database"
   },
   {
    "seq": "ARR",

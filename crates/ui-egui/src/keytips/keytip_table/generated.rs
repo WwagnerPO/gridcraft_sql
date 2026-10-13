@@ -285,8 +285,8 @@ pub const SEQUENCES: &[(&str, Entry)] = &[
     ("APNE", Entry::Finish(Action::Pending("data.powerQueryEditor"))), // pending; Excel: Launch Power Query Editor; gap #12; reserved until the command lands
     ("APNG", Entry::Finish(Action::Command("data.getData"))),          // Excel: Get Data (Power Query); containment(Get Data)
     ("APNH", Entry::Finish(Action::Pending("data.fromHtml"))),         // pending; Excel: From HTML; gap #12; reserved until the command lands
-    ("APNL", Entry::Finish(Action::Pending("data.fromSqlServer"))), // pending; Excel: From SQL Server ODBC; gap #12; reserved until the command lands
-    ("APNS", Entry::Finish(Action::Pending("data.dataSourceSettings"))), // pending; Excel: Data Source Settings; gap #12; reserved until the command lands
+    ("APNL", Entry::Finish(Action::Command("data.fromSqlServer"))),    // Excel: From SQL Server ODBC; gap #12: From SQL Server Database
+    ("APNS", Entry::Finish(Action::Command("data.dataSourceSettings"))), // Excel: Data Source Settings; gap #12: From SQL Server Database
     ("APNT", Entry::Finish(Action::Pending("data.fromTextLegacy"))), // pending; Excel: From Text (Legacy); gap #12; reserved until the command lands
     ("APR", Entry::Finish(Action::Pending("data.recentSources"))),   // pending; Excel: Recent Sources; gap #12; reserved until the command lands
     ("APS", Entry::Finish(Action::Command("data.queriesConnections"))), // Excel: Show Queries
@@ -295,18 +295,18 @@ pub const SEQUENCES: &[(&str, Entry)] = &[
     ("AR", Entry::Continue),                                         // group: group: Queries & Connections
     ("ARA", Entry::Finish(Action::Command("data.refreshAll"))),      // Excel: Refresh All
     ("ARC", Entry::Finish(Action::Pending("data.cancelRefresh"))),   // pending; Excel: Cancel Refresh; gap #12; reserved until the command lands
-    ("ARO", Entry::Finish(Action::Pending("data.connectionProperties"))), // pending; Excel: Connection Properties; gap #12; reserved until the command lands
-    ("ARR", Entry::Finish(Action::Command("pivot.refresh"))),             // Excel: Refresh
-    ("ARS", Entry::Finish(Action::Pending("data.refreshStatus"))),        // pending; Excel: Refresh Status; gap #12; reserved until the command lands
-    ("ASA", Entry::Finish(Action::Command("data.sortAscending"))),        // Excel: Sort A to Z
-    ("ASD", Entry::Finish(Action::Command("data.sortDescending"))),       // Excel: Sort Z to A
-    ("ASS", Entry::Finish(Action::Dialog("sort"))),                       // Excel: Sort
-    ("AT", Entry::Finish(Action::Command("data.filter"))),                // Excel: Filter
-    ("AU", Entry::Continue),                                              // Excel: Ungroup Menu; group level: containment(Ungroup)
-    ("AUC", Entry::Finish(Action::Pending("data.clearOutline"))), // pending; Excel: Clear Outline; feature gap; reserved until the command lands
-    ("AUU", Entry::Finish(Action::Command("data.ungroup"))),      // Excel: Ungroup
-    ("AV", Entry::Continue),                                      // Excel: Data Validation Menu; group level: containment(Data Validation)
-    ("AVI", Entry::Finish(Action::Command("data.circleInvalid"))), // Excel: Circle Invalid Data
+    ("ARO", Entry::Finish(Action::Command("data.connectionProperties"))), // Excel: Connection Properties; gap #12: From SQL Server Database
+    ("ARR", Entry::Finish(Action::Command("pivot.refresh"))),        // Excel: Refresh
+    ("ARS", Entry::Finish(Action::Pending("data.refreshStatus"))),   // pending; Excel: Refresh Status; gap #12; reserved until the command lands
+    ("ASA", Entry::Finish(Action::Command("data.sortAscending"))),   // Excel: Sort A to Z
+    ("ASD", Entry::Finish(Action::Command("data.sortDescending"))),  // Excel: Sort Z to A
+    ("ASS", Entry::Finish(Action::Dialog("sort"))),                  // Excel: Sort
+    ("AT", Entry::Finish(Action::Command("data.filter"))),           // Excel: Filter
+    ("AU", Entry::Continue),                                         // Excel: Ungroup Menu; group level: containment(Ungroup)
+    ("AUC", Entry::Finish(Action::Pending("data.clearOutline"))),    // pending; Excel: Clear Outline; feature gap; reserved until the command lands
+    ("AUU", Entry::Finish(Action::Command("data.ungroup"))),         // Excel: Ungroup
+    ("AV", Entry::Continue),                                         // Excel: Data Validation Menu; group level: containment(Data Validation)
+    ("AVI", Entry::Finish(Action::Command("data.circleInvalid"))),   // Excel: Circle Invalid Data
     ("AVR", Entry::Finish(Action::Pending("data.clearValidationCircles"))), // pending; Excel: Clear Validation Circles; reserved until the command lands
     ("AVV", Entry::Finish(Action::Command("data.validation"))),             // Excel: Data Validation
     ("AW", Entry::Continue),                                                // group: group: What-If (goalSeek/scenarioManager/dataTable)

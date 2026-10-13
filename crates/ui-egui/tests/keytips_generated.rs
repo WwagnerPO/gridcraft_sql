@@ -2092,20 +2092,14 @@ fn keytip_apnh_() {
 fn keytip_apnl_() {
     let mut h = harness(blank());
     sequence(&mut h, "APNL", false);
-    assert!(h.state().dialog.is_none(), "APNL must not open a dialog");
-    assert!(h.state().message.is_none(), "APNL must not open a message box");
-    assert!(h.state().toast.is_none(), "APNL must not raise a toast");
-    assert!(h.state().session.journal.is_empty(), "APNL must not journal");
+    assert!(h.state().session.journal.iter().any(|(id, _)| id == "data.fromSqlServer"), "APNL must journal data.fromSqlServer");
 }
 
 #[test]
 fn keytip_apns_() {
     let mut h = harness(blank());
     sequence(&mut h, "APNS", false);
-    assert!(h.state().dialog.is_none(), "APNS must not open a dialog");
-    assert!(h.state().message.is_none(), "APNS must not open a message box");
-    assert!(h.state().toast.is_none(), "APNS must not raise a toast");
-    assert!(h.state().session.journal.is_empty(), "APNS must not journal");
+    assert!(h.state().message.is_none() && h.state().toast.is_none(), "APNS must run data.dataSourceSettings cleanly");
 }
 
 #[test]
@@ -2180,10 +2174,10 @@ fn keytip_arc_() {
 fn keytip_aro_() {
     let mut h = harness(blank());
     sequence(&mut h, "ARO", false);
-    assert!(h.state().dialog.is_none(), "ARO must not open a dialog");
-    assert!(h.state().message.is_none(), "ARO must not open a message box");
-    assert!(h.state().toast.is_none(), "ARO must not raise a toast");
-    assert!(h.state().session.journal.is_empty(), "ARO must not journal");
+    assert!(
+        h.state().message.is_some() || h.state().toast.is_some(),
+        "ARO must invoke data.connectionProperties and surface its missing-params error"
+    );
 }
 
 #[test]

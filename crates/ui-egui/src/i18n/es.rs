@@ -162,7 +162,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Custom Sort…" => "Orden personalizado…",
         "Filter" => "Filtro",
         "Reapply" => "Volver a aplicar",
-        "Get Data\n(Text/CSV)" => "Obtener datos\n(texto/CSV)",
+        "Get\nData" => "Obtener\ndatos",
         "Remove\nDuplicates" => "Quitar\nduplicados",
         "Data\nValidation" => "Validación\nde datos",
         "Data Validation" => "Validación de datos",
@@ -440,6 +440,60 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Compact" => "Compacto",
         "Outline" => "Esquema",
         "Tabular" => "Tabular",
+        // Get Data › From Database, Queries & Connections
+        "From Text/CSV…" => "Desde el archivo de texto/CSV…",
+        "From SQL Server Database…" => "Desde una base de datos de SQL Server…",
+        "From Table/Range" => "Desde una tabla o rango",
+        "Data Source Settings…" => "Configuración de origen de datos…",
+        "Get Data from a file or a database" => "Obtener datos de un archivo o una base de datos",
+        "Refresh\nAll" => "Actualizar\ntodo",
+        "Refresh All" => "Actualizar todo",
+        "Connection Properties…" => "Propiedades de conexión…",
+        "Connection Properties" => "Propiedades de conexión",
+        "Queries & Connections" => "Consultas y conexiones",
+        "SQL Server database" => "Base de datos de SQL Server",
+        "Data Source Settings" => "Configuración de origen de datos",
+        "Query Properties" => "Propiedades de la consulta",
+        "Server" => "Servidor",
+        "Database (optional)" => "Base de datos (opcional)",
+        "Advanced options" => "Opciones avanzadas",
+        "SQL statement (optional, requires database)" => "Instrucción SQL (opcional, requiere base de datos)",
+        "Encrypt connection" => "Cifrar conexión",
+        "Trust the server certificate" => "Confiar en el certificado del servidor",
+        "The server may not support encryption, or its certificate isn't trusted. You can connect without encryption, or trust the certificate under Advanced options." => {
+            "Puede que el servidor no admita el cifrado o que su certificado no sea de confianza. Puede conectarse sin cifrado, o confiar en el certificado en Opciones avanzadas."
+        }
+        "Connect without encryption" => "Conectar sin cifrado",
+        "OK" => "Aceptar",
+        "Cancel" => "Cancelar",
+        "Enter a server name." => "Escriba el nombre de un servidor.",
+        "A SQL statement needs a database." => "Una instrucción SQL necesita una base de datos.",
+        "Sign in to" => "Iniciar sesión en",
+        "Use a SQL Server login. GridCraft keeps it for this session and never saves it in the workbook." => {
+            "Use un inicio de sesión de SQL Server. GridCraft lo guarda durante esta sesión y nunca lo guarda en el libro."
+        }
+        "User name" => "Nombre de usuario",
+        "Password" => "Contraseña",
+        "Show password" => "Mostrar contraseña",
+        "Connect" => "Conectar",
+        "Database" => "Base de datos",
+        "Search" => "Buscar",
+        "Select multiple items" => "Seleccionar varios elementos",
+        "Choose a database." => "Elija una base de datos.",
+        "This database has no tables or views you can read." => "Esta base de datos no tiene tablas ni vistas que pueda leer.",
+        "Select a table or view to preview its data." => "Seleccione una tabla o vista para obtener una vista previa de sus datos.",
+        "Load" => "Cargar",
+        "rows loaded." => "filas cargadas.",
+        "No database logins are kept in this session." => "No hay inicios de sesión de bases de datos guardados en esta sesión.",
+        "Edit Permissions…" => "Editar permisos…",
+        "Clear Permissions" => "Borrar permisos",
+        "This workbook has no queries. Use Get Data to load data from a database." => {
+            "Este libro no tiene consultas. Use Obtener datos para cargar datos de una base de datos."
+        }
+        "query" => "consulta",
+        "queries" => "consultas",
+        "Last refreshed" => "Última actualización",
+        "Properties…" => "Propiedades…",
         _ => return None,
     })
 }

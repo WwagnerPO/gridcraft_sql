@@ -113,6 +113,9 @@ pub struct Workbook {
     /// separator back (a `;` file stays a `;` file). `None` = not read from CSV: CSV saves use `,`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub csv_delimiter: Option<u8>,
+    /// External data connections (Data › Queries & Connections), in file order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub connections: Vec<crate::connection::Connection>,
     /// Unmodelled file content kept for saving (package root and workbook level). Not in JSON.
     #[serde(skip)]
     pub preserved: Option<Arc<crate::preserved::Preserved>>,
@@ -146,6 +149,7 @@ impl Workbook {
             cell_styles: vec![],
             vba_project: None,
             csv_delimiter: None,
+            connections: vec![],
             preserved: None,
             source_dir: None,
         }

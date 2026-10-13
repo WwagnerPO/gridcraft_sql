@@ -189,6 +189,14 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
                             && let Some(mut t) = read_table(cx, &x)
                         {
                             t.id = cx.next_object_id();
+                            // A query table names the connection that fills the table.
+                            if x.attr("tableType") == Some("queryTable")
+                                && let Some(q) = cx.pkg.rels(&target)?.into_iter().find(|r| r.kind == "queryTable")
+                                && let Ok(Some(qx)) = cx.pkg.read_xml(&q.target)
+                                && let Some(id) = qx.attr_u32("connectionId")
+                            {
+                                cx.query_tables.push((t.name.clone(), id));
+                            }
                             sheet.tables.push(t);
                         }
                     }

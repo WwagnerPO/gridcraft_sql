@@ -94,6 +94,16 @@ impl Dialog {
         }
     }
 
+    /// The sign-in step of the SQL Server dialog on its own: Refresh asks for a login with it,
+    /// then runs `retry` (a refresh command) with `params` again. An empty `retry` only stores it.
+    pub fn login(server: &str, user: &str, retry: &str, params: Json) -> Option<Dialog> {
+        Some(Dialog::custom(
+            "sqlServer",
+            "SQL Server database",
+            json!({"stage": "credentials", "server": server, "user": user, "retry": retry, "retryParams": params, "encrypt": true}),
+        ))
+    }
+
     pub fn open(app: &mut SheetApp, name: &str, params: Json) -> Option<Dialog> {
         let sel = app.session.active().map(|d| d.selection.current().a1()).unwrap_or_default();
         let active = app.session.active().map(|d| d.selection.active.a1()).unwrap_or_default();
@@ -774,6 +784,54 @@ impl Dialog {
                 dialog
             }
             "pickList" => Dialog::custom("pickList", "Pick From List", json!({})),
+            "sqlServer" => Dialog::custom(
+                "sqlServer",
+                "SQL Server database",
+                json!({"stage": "source", "server": p("server").as_str().unwrap_or(""), "database": p("database").as_str().unwrap_or(""), "encrypt": true, "trust": false}),
+            ),
+            "dataSourceSettings" => Dialog::custom("dataSourceSettings", "Data Source Settings", json!({})),
+            "connectionProperties" => {
+                let name = p("connection").as_str().map(str::to_string).or_else(|| {
+                    let doc = app.session.active()?;
+                    let t = doc.wb.active()?.table_at(doc.selection.active)?;
+                    doc.wb.connections.iter().find(|c| c.table.eq_ignore_ascii_case(&t.name)).map(|c| c.name.clone())
+                });
+                let conn = name.and_then(|n| app.session.active()?.wb.connections.iter().find(|c| c.name.eq_ignore_ascii_case(&n)).cloned());
+                let Some(c) = conn else {
+                    app.message = Some((
+                        "Connection Properties".into(),
+                        "Select a cell in a table loaded from a database, or open Queries & Connections.".into(),
+                    ));
+                    return None;
+                };
+                let sql = match &c.command {
+                    gridcraft_engine::model::QueryCommand::Sql { text } => text.clone(),
+                    _ => String::new(),
+                };
+                let mut fields = vec![
+                    Text { key: "name", label: "Query name:" },
+                    Text { key: "description", label: "Description:" },
+                    Check { key: "refreshOnOpen", label: "Refresh data when opening the file" },
+                    Number { key: "refreshMinutes", label: "Refresh every (minutes, 0 = never):" },
+                ];
+                if !sql.is_empty() {
+                    fields.push(Text { key: "sql", label: "SQL statement:" });
+                }
+                Dialog::form(
+                    "connectionProperties",
+                    "Query Properties",
+                    "data.connectionProperties",
+                    fields,
+                    json!({
+                        "connection": c.name,
+                        "name": c.name,
+                        "description": c.description,
+                        "refreshOnOpen": c.refresh_on_open,
+                        "refreshMinutes": c.refresh_minutes,
+                        "sql": sql,
+                    }),
+                )
+            }
             "saveCopy" => Dialog::custom("saveCopy", "Save a Copy", json!({"format": p("format")})),
             "saveChanges" => Dialog::custom("saveChanges", "Save Changes?", json!({"title": p("title")})),
             "start" => Dialog::custom("start", "GridCraft", json!({})),
@@ -1033,6 +1091,8 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         "recommendedCharts" => 600.0,
         "analysisToolPak" => 420.0,
         "solver" => 460.0,
+        "sqlServer" if matches!(d.values.get("stage").and_then(Json::as_str), Some("navigator" | "preview")) => 680.0,
+        "sqlServer" | "dataSourceSettings" => 440.0,
         _ => 380.0,
     };
     let window = egui::Window::new(app.ui.language.tr(&d.title))
@@ -1058,6 +1118,8 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 "selectData" => select_data(app, ui, &mut d, &mut confirm, &mut open),
                 "commandSearch" => command_search(app, ui, &mut d, &mut confirm),
                 "goalSeek" => goal_seek(app, ui, &mut d, &mut confirm),
+                "sqlServer" => crate::get_data::sql_server(app, ui, &mut d, &mut open),
+                "dataSourceSettings" => crate::get_data::data_source_settings(app, ui, &mut d, &mut open),
                 "analysisToolPak" => analysis_toolpak(app, ui, &mut d, &mut confirm, &mut open),
                 "solver" => solver(ui, &mut d, &mut confirm, &mut open),
                 "solverResults" => solver_results(app, ui, &mut d, &mut open),

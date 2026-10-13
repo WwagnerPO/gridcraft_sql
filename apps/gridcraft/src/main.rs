@@ -289,6 +289,8 @@ fn main() -> eframe::Result<()> {
         }
     }
     let mut session = Session::new();
+    // Get Data › From Database reaches SQL Server through this.
+    session.set_data_provider(std::sync::Arc::new(gridcraft_sqlserver::SqlServerProvider::default()));
     if let Some(s) = &sample
         && let Err(e) = session.execute("file.new", json!({"sample": s}))
     {

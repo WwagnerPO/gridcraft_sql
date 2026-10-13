@@ -1,0 +1,20 @@
+[package]
+name = "gridcraft-sqlserver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "GridCraft SQL Server connector: the engine's DataProvider over TDS (tiberius), pure Rust, TLS by rustls"
+
+[lints]
+workspace = true
+
+[dependencies]
+gridcraft-engine = { workspace = true }
+log = { workspace = true }
+# SQL Server's TDS protocol in pure Rust (MIT OR Apache-2.0); rustls for TLS, so no OpenSSL or
+# ODBC driver is needed. Native only: there are no sockets on wasm.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tiberius = { version = "=0.13.0", default-features = false, features = ["tds80", "rustls", "sql-browser-tokio"] }
+tokio = { version = "1", default-features = false, features = ["rt", "net", "time"] }
+tokio-util = { version = "0.7", default-features = false, features = ["compat"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }

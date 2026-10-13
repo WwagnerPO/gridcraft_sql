@@ -1055,6 +1055,13 @@ fn chart_sheet_usable(wb: &Workbook, p: &Preserved, s: &PreservedSheet) -> bool 
     formulas.iter().flat_map(|f| sheet_names_in(f)).all(|n| wb.sheets.iter().any(|w| same(&w.name, &n)))
 }
 
+/// The bytes of the kept connections part, if the workbook has one.
+pub fn kept_connections(wb: &Workbook) -> Option<&[u8]> {
+    let p = wb.preserved.as_deref()?;
+    let r = p.rels.iter().find(|r| !r.external && is_kind(r, &["connections"]))?;
+    p.parts.iter().find(|q| normalize(&q.name) == normalize(&r.target)).map(|q| &q.data[..])
+}
+
 /// Writes the workbook's kept parts and relationships. Chart sheets that can't be written back
 /// (see [`chart_sheet_usable`]) are left out with the parts only they reach.
 pub fn write_workbook(wb: &Workbook, wb_rels: &mut Rels, out: &mut Out) -> WorkbookKept {
@@ -1070,7 +1077,17 @@ pub fn write_workbook(wb: &Workbook, wb_rels: &mut Rels, out: &mut Out) -> Workb
             gone.remove(&n);
         }
     }
-    let parts: Vec<PreservedPart> = p.parts.iter().filter(|q| !gone.contains(&normalize(&q.name))).cloned().collect();
+    let mut parts: Vec<PreservedPart> = p.parts.iter().filter(|q| !gone.contains(&normalize(&q.name))).cloned().collect();
+    // Connections added in GridCraft join a kept connections part.
+    if !wb.connections.is_empty()
+        && let Some(r) = p.rels.iter().find(|r| !r.external && is_kind(r, &["connections"]))
+        && let Some(q) = parts.iter_mut().find(|q| normalize(&q.name) == normalize(&r.target))
+    {
+        let first = crate::connections::max_id(&q.data).saturating_add(1);
+        if let Some(merged) = crate::connections::merge(&q.data, &crate::connections::connection_elements(wb, first)) {
+            q.data = merged.into();
+        }
+    }
     let rels: Vec<PreservedRel> = p.rels.iter().filter(|r| !dropped_ids.contains(r.id.as_str())).cloned().collect();
     let names = write_parts(out, &parts);
     let ids = attach(wb_rels, &rels, &names);

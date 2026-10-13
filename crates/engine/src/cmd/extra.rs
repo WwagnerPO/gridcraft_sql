@@ -180,7 +180,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             from_table_range
         ),
-        cmd!(query "data.queriesConnections", "Queries & Connections", ["Data", "Queries & Connections"], None, "{} → imported tables", has_doc, queries),
+        cmd!(query "data.queriesConnections", "Queries & Connections", ["Data", "Queries & Connections"], None, "{} → {tables, connections (database queries)}", has_doc, queries),
         // Automate
         cmd!(noundo "automate.recordActions", "Record Actions", ["Automate", "Scripting Tools"], None, "{stop?: bool, name?: script name when stopping}", has_doc, record),
         cmd!(
@@ -930,7 +930,7 @@ fn from_table_range(s: &mut Session, p: &Json) -> Result<Json> {
 
 fn queries(s: &mut Session, _: &Json) -> Result<Json> {
     let d = s.doc()?;
-    Ok(Json::Array(
+    let tables: Vec<Json> =
         d.wb.sheets
             .iter()
             .flat_map(|sh| {
@@ -938,8 +938,9 @@ fn queries(s: &mut Session, _: &Json) -> Result<Json> {
                     .iter()
                     .map(move |t| json!({"name": t.name, "sheet": sh.name, "range": t.range.a1(), "rows": t.range.height().saturating_sub(1)}))
             })
-            .collect(),
-    ))
+            .collect();
+    let connections: Vec<Json> = d.wb.connections.iter().map(super::connections::connection_json).collect();
+    Ok(json!({"tables": tables, "connections": connections}))
 }
 
 fn record(s: &mut Session, p: &Json) -> Result<Json> {

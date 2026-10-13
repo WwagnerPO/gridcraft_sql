@@ -30,6 +30,8 @@ pub struct Ctx<'a> {
     pub cell_pictures: Vec<Option<Arc<CellPicture>>>,
     /// x14 conditional-format ids of the current sheet's data bars, with the index of the rule in `cond_formats`.
     pub cf_ext_ids: Vec<(String, usize)>,
+    /// Tables bound to a query table: (table name, connection id).
+    pub query_tables: Vec<(String, u32)>,
 }
 
 impl Ctx<'_> {
@@ -82,6 +84,7 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
         num_fmts: Default::default(),
         cell_pictures: vec![],
         cf_ext_ids: vec![],
+        query_tables: vec![],
     };
     let root_rels = cx.pkg.rels("")?;
     let wb_part = find_rel(&root_rels, "officeDocument").map(|r| r.target.clone()).unwrap_or_else(|| "xl/workbook.xml".into());
@@ -340,6 +343,26 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
         }
     }
     wb.preserved = kept.workbook(&mut cx, &wb_part, &wb_xml, &file_to_model);
+    // Database connections GridCraft models are read into the workbook and no longer kept.
+    if let Some(r) = find_rel(&wb_rels, "connections").cloned()
+        && let Ok(Some(x)) = cx.pkg.read_xml(&r.target)
+        && let Some(list) = crate::connections::read(&x, &cx.query_tables)
+    {
+        wb.connections = list;
+        if let Some(p) = wb.preserved.as_mut() {
+            let p = std::sync::Arc::make_mut(p);
+            p.rels.retain(|k| k.external || !k.rel_type.ends_with("/connections"));
+            p.parts.retain(|q| crate::package::normalize(&q.name) != crate::package::normalize(&r.target));
+        }
+        let rows: Vec<u64> = wb
+            .connections
+            .iter()
+            .map(|c| wb.table(&c.table).and_then(|(si, ti)| wb.sheets.get(si)?.tables.get(ti)?.data_range()).map_or(0, |d| d.height() as u64))
+            .collect();
+        for (c, n) in wb.connections.iter_mut().zip(rows) {
+            c.rows = n;
+        }
+    }
     // Calls of LAMBDA names are spelled like the names (the parser upper-cases them).
     wb.apply_name_call_case();
     wb.styles = cx.styles;

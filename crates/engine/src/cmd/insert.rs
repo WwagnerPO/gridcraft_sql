@@ -468,7 +468,7 @@ fn table_style(s: &mut Session, p: &Json) -> Result<Json> {
 /// Table names follow the Microsoft name rules, as the xlsx writer does: letters, digits, `_` and `.`,
 /// starting with a letter, `_` or `\`. Anything else (a hyphen, say) would read as an operator inside a
 /// structured reference, and the writer would rename the table on save.
-fn valid_table_name(name: &str) -> bool {
+pub(crate) fn valid_table_name(name: &str) -> bool {
     name.starts_with(|c: char| c.is_alphabetic() || c == '_' || c == '\\')
         && CellRef::parse(name).is_none()
         && name.chars().enumerate().all(|(i, c)| c.is_alphanumeric() || c == '_' || c == '.' || (i == 0 && c == '\\'))
@@ -487,6 +487,10 @@ fn table_rename(s: &mut Session, p: &Json) -> Result<Json> {
         let old = cx.wb.sheet(si).and_then(|sh| sh.tables.get(ti)).map(|t| t.name.clone()).unwrap_or_default();
         if let Some(t) = cx.sheet_mut(si)?.tables.get_mut(ti) {
             t.name = name.clone();
+        }
+        // A query keeps loading into its table.
+        for c in cx.wb.connections.iter_mut().filter(|c| c.table.eq_ignore_ascii_case(&old)) {
+            c.table = name.clone();
         }
         // Structured references follow the rename.
         for i in 0..cx.wb.sheets.len() {
@@ -531,6 +535,8 @@ fn table_convert(s: &mut Session, p: &Json) -> Result<Json> {
         if let Some(sh) = wb.sheet_mut(si) {
             sh.tables.remove(ti);
         }
+        // A range has no query: its connection goes with the table.
+        wb.connections.retain(|c| !c.table.eq_ignore_ascii_case(&t.name));
         cx.structural = true;
         Ok(Json::Null)
     })

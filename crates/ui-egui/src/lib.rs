@@ -17,6 +17,7 @@ pub mod editor;
 pub mod fonts;
 pub mod formula_bar;
 mod formula_locale;
+pub mod get_data;
 pub mod grid;
 pub mod i18n;
 pub mod icons;
@@ -222,6 +223,8 @@ pub struct SheetApp {
     pub toast: Option<(String, f64)>,
     /// Dismissible info bar under the ribbon (open-time notices).
     pub notice: Option<Notice>,
+    /// When each query with a refresh interval last refreshed: (document uid, query name, ms).
+    pub query_timers: Vec<(u64, String, f64)>,
     pub services: Services,
     pub printing: printing::State,
     print_feedback_seen: Option<printing::Feedback>,
@@ -278,6 +281,7 @@ impl SheetApp {
             message: None,
             toast: None,
             notice: None,
+            query_timers: vec![],
             services,
             printing: Default::default(),
             print_feedback_seen: None,
@@ -504,6 +508,10 @@ impl SheetApp {
         // Programmatic callers use `run` and keep getting the PDF bytes back.
         if id == "file.exportPdf" && self.services.pick_save.is_some() && params.get("path").and_then(Json::as_str).is_none_or(str::is_empty) {
             return self.export_pdf_with_picker(params);
+        }
+        // Refresh asks for a database login when the server has none, then refreshes.
+        if matches!(id, "data.refresh" | "data.refreshAll") {
+            return get_data::refresh_with_login(self, id, params);
         }
         if let Err(e) = self.run(id, params) {
             self.alert(e);
@@ -782,6 +790,7 @@ impl SheetApp {
             self.ui.recent.truncate(20);
         }
         self.show_open_warnings(r);
+        get_data::refresh_on_open(self);
     }
 
     /// Turns the `warnings` a `file.open` result carries into an info-bar notice, choosing the
@@ -1099,6 +1108,7 @@ impl SheetApp {
             return;
         }
         let t0 = now_ms();
+        get_data::tick(self, &ctx);
         text_box::before_ui(self, &ctx);
         // The language the widgets translate with this frame (see `i18n::current`).
         i18n::set_current(&ctx, self.ui.language);
