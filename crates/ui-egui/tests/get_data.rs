@@ -9,7 +9,7 @@ use egui_kittest::kittest::Queryable;
 use gridcraft_engine::Session;
 use gridcraft_engine::datasource::{Credential, DataProvider, DbColumn, DbError, DbObject, DbValue, QueryResult, Statement};
 use gridcraft_engine::model::{DataSource, QueryCommand};
-use gridcraft_ui_egui::SheetApp;
+use gridcraft_ui_egui::{LoginStore, SheetApp};
 use serde_json::{Value as Json, json};
 
 type Harness = egui_kittest::Harness<'static, SheetApp>;
@@ -308,4 +308,59 @@ fn a_write_without_a_login_asks_for_it_and_comes_back() {
     let d = h.state().dialog.as_ref().expect("Run SQL comes back");
     assert_eq!(d.name(), "sqlExecute");
     assert_eq!(d.values["sql"], "EXEC x");
+}
+
+/// A credential store in memory.
+#[derive(Clone, Default)]
+struct MemLogins(Arc<Mutex<Vec<(String, String, String)>>>);
+
+impl LoginStore for MemLogins {
+    fn load(&self, server: &str) -> Option<(String, String)> {
+        self.0.lock().ok()?.iter().find(|x| x.0 == server).map(|x| (x.1.clone(), x.2.clone()))
+    }
+    fn save(&self, server: &str, user: &str, password: &str) -> Result<(), String> {
+        let mut v = self.0.lock().map_err(|_| "poisoned".to_string())?;
+        v.retain(|x| x.0 != server);
+        v.push((server.into(), user.into(), password.into()));
+        Ok(())
+    }
+    fn forget(&self, server: &str) {
+        if let Ok(mut v) = self.0.lock() {
+            v.retain(|x| x.0 != server);
+        }
+    }
+}
+
+#[test]
+fn a_remembered_login_is_used_after_a_restart() {
+    let db = Arc::new(FakeDb::default());
+    let logins = MemLogins::default();
+    let mut h = harness(db.clone());
+    h.state_mut().services.logins = Some(Box::new(logins.clone()));
+    h.state_mut().open_dialog("sqlServer", json!({"server": "db.example", "database": "Shop"}));
+    settle(&mut h);
+    h.get_by_label("OK").click();
+    settle(&mut h);
+    assert_eq!(stage(&h), "credentials");
+    set(&mut h, "user", json!("reader"));
+    set(&mut h, "password", json!("pw"));
+    settle(&mut h);
+    h.get_by_label("Connect").click();
+    settle(&mut h);
+    assert_eq!(logins.load("db.example"), Some(("reader".into(), "pw".into())), "Remember is on by default");
+    h.state_mut().dialog = None;
+    h.state_mut().run("data.fromSqlServer", json!({"server": "db.example", "database": "Shop", "table": "dbo.Customers"})).unwrap();
+    // A new session (the app restarted): Refresh All finds the login without asking.
+    h.state_mut().session.clear_credential("db.example");
+    let before = *db.queries.lock().unwrap();
+    h.state_mut().run_or_alert("data.refreshAll", json!({}));
+    settle(&mut h);
+    assert!(h.state().dialog.is_none(), "no sign-in asked");
+    assert_eq!(*db.queries.lock().unwrap(), before + 1);
+    // Clear Permissions forgets it on this computer too.
+    h.state_mut().open_dialog("dataSourceSettings", json!({}));
+    settle(&mut h);
+    h.get_by_label("Clear Permissions").click();
+    settle(&mut h);
+    assert_eq!(logins.load("db.example"), None);
 }

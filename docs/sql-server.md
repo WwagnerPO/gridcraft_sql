@@ -61,11 +61,14 @@ journaled, so replaying a recorded script never writes again.
 
 ## Credentials
 
-Logins are kept **in memory for the session only**, per server. They never go into the workbook,
-the journal, recorded scripts or logs (`password` is a secret parameter). When a refresh needs a
-login the session doesn't have, or the server refuses the one it has, the app asks for it and then
-refreshes. **Data › Get Data › Data Source Settings…** lists the kept logins and clears or replaces
-them.
+Logins never go into the workbook, the journal, recorded scripts or logs (`password` is a secret
+parameter). The session keeps them in memory per server; with **Remember on this computer** (on by
+default in the desktop app) they also go to the system's credential store: Windows Credential
+Manager, the macOS Keychain or the Secret Service on Linux, under "GridCraft database login". When
+a refresh or a write needs a login the session doesn't have, the remembered one is used; if there
+is none, or the server refuses it, the app asks and then carries on. **Data › Get Data › Data
+Source Settings…** lists the session's logins and clears them (from the credential store too).
+Windows (current user) sign-in needs no stored login at all.
 
 ## In the file
 
@@ -110,6 +113,7 @@ gridcraft-cli run --in customers.xlsx --cmd 'data.dataSourceSettings={"server":"
 - Queries run while the window waits; the connection times out after 15 seconds and a statement
   after 10 minutes.
 - Last-refreshed times are UTC and aren't saved in the file.
+- The CLI and MCP keep logins for their session only (pass `user` and `password`).
 
 ## Testing against a real server
 

@@ -83,9 +83,21 @@ fn message(e: &str) -> String {
     crate::clean_error(e)
 }
 
+/// Puts a login remembered on this computer into the session when it has none for `server`.
+pub fn recall_login(app: &mut SheetApp, server: &str) {
+    let server = server.trim();
+    if server.is_empty() || app.session.credential(server).is_some() {
+        return;
+    }
+    if let Some((user, password)) = app.services.logins.as_ref().and_then(|l| l.load(server)) {
+        app.session.set_credential(server, gridcraft_engine::datasource::Credential { user, password });
+    }
+}
+
 /// Runs the step after the source (and sign-in): the Navigator, or the statement's preview.
 fn connect(app: &mut SheetApp, d: &mut Dialog) {
     set(d, "error", json!(""));
+    recall_login(app, &s(d, "server"));
     let mut p = source(d);
     let sql = s(d, "sql");
     let r = if sql.trim().is_empty() {
@@ -229,6 +241,11 @@ fn credentials(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut bool)
         ui.checkbox(&mut show, tr(app, "Show password"));
         ui.end_row();
     });
+    let mut remember = b(d, "remember", true);
+    if !integrated && app.services.logins.is_some() {
+        ui.checkbox(&mut remember, tr(app, "Remember on this computer"));
+    }
+    set(d, "remember", json!(remember));
     set(d, "user", json!(user));
     set(d, "password", json!(password));
     set(d, "showPassword", json!(show));
@@ -254,6 +271,15 @@ fn credentials(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut bool)
                 {
                     set(d, "error", json!(message(&e)));
                     return;
+                } else if let Some(store) = app.services.logins.as_ref() {
+                    // Kept in the system's credential store, or forgotten when unticked.
+                    if remember {
+                        if let Err(e) = store.save(server.trim(), user.trim(), &password) {
+                            app.toast = Some((format!("{} {e}", tr(app, "The login couldn't be remembered:")), crate::now_ms()));
+                        }
+                    } else {
+                        store.forget(server.trim());
+                    }
                 }
                 set(d, "password", json!(""));
                 let retry = s(d, "retry");
@@ -503,6 +529,9 @@ pub fn data_source_settings(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, ope
     });
     if let Some(server) = clear {
         app.run_or_alert("data.dataSourceSettings", json!({"server": server, "clear": true}));
+        if let Some(store) = app.services.logins.as_ref() {
+            store.forget(&server);
+        }
     }
     if let Some(server) = edit {
         *open = false;
@@ -549,6 +578,9 @@ fn servers_for(app: &SheetApp, id: &str, params: &Json) -> Vec<String> {
 /// was refused), then running it again. Query errors Refresh All collects are shown together.
 pub fn refresh_with_login(app: &mut SheetApp, id: &str, params: Json) {
     let servers = servers_for(app, id, &params);
+    for s in &servers {
+        recall_login(app, s);
+    }
     let user_of = |app: &SheetApp, server: &str| {
         app.session
             .active()
@@ -688,7 +720,12 @@ pub fn tick(app: &mut SheetApp, ctx: &egui::Context) {
                 now
             }
         };
-        let busy = app.dialog.is_some() || app.editor.is_some() || app.session.credential(&server).is_none();
+        recall_login(app, &server);
+        let integrated = app
+            .session
+            .active()
+            .is_some_and(|d| d.wb.connections.iter().any(|c| c.name == name && c.source.auth() == gridcraft_engine::model::SqlAuth::Integrated));
+        let busy = app.dialog.is_some() || app.editor.is_some() || (!integrated && app.session.credential(&server).is_none());
         if now - last >= period && !busy {
             if let Err(e) = app.run("data.refresh", json!({"connection": name})) {
                 app.toast = Some((format!("{name}: {}", message(&e)), now));
@@ -771,6 +808,8 @@ fn server_of(app: &SheetApp, p: &Json) -> String {
 /// Runs a write command; a missing or refused login opens the sign-in step, then this dialog
 /// again. `Ok` carries the result.
 fn write(app: &mut SheetApp, d: &mut Dialog, id: &str, p: Json, open: &mut bool) -> Option<Json> {
+    let server = server_of(app, &p);
+    recall_login(app, &server);
     match app.run(id, p.clone()) {
         Ok(v) => {
             set(d, "error", json!(""));

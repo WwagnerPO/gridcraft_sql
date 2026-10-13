@@ -26,6 +26,9 @@ winresource = "0.1"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Data › Get Data › From Database › From SQL Server Database.
 gridcraft-sqlserver = { workspace = true }
+# Database logins the user asks to remember: Windows Credential Manager, macOS Keychain, the
+# Secret Service on Linux (pure Rust zbus, already in the tree through AccessKit).
+keyring = "=4.2.0"
 craft-print = { git = "https://github.com/storytold/craft-libs", rev = "d27646a5f7c8b4fc85d9dd3213b8c88b58e0088d" }
 rfd = { workspace = true }
 arboard = { workspace = true }

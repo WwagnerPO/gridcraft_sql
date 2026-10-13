@@ -534,6 +534,8 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "GridCraft keeps the login for this session and never saves it in the workbook." => {
             "GridCraft guarda el inicio de sesión durante esta sesión y nunca lo guarda en el libro."
         }
+        "Remember on this computer" => "Recordar en este equipo",
+        "The login couldn't be remembered:" => "No se pudo recordar el inicio de sesión:",
         _ => return None,
     })
 }

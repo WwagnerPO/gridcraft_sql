@@ -14,6 +14,7 @@ mod control_server;
 #[cfg(any(target_os = "windows", test))]
 mod graphics;
 mod logging;
+mod logins;
 #[cfg(target_os = "macos")]
 mod native_menu;
 mod print;
@@ -195,6 +196,8 @@ fn services() -> Services {
         open_url: Some(Box::new(|url: &str| open_with_system(url))),
         printers: Some(print::discover()),
         print_native: Some(print::submit()),
+        // Agents' test runs (no preferences) never touch the user's credential store.
+        logins: prefs_enabled().then(|| Box::new(logins::SystemLogins) as Box<dyn gridcraft_ui_egui::LoginStore>),
         ..Default::default()
     }
 }

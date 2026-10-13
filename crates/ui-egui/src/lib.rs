@@ -197,6 +197,17 @@ pub struct Services {
     /// Web: hand PDF bytes to the browser's print flow directly (no download,
     /// no intermediate file) — opens the system print dialog on that PDF.
     pub print: Option<Box<dyn Fn(&[u8])>>,
+    /// Desktop: the system's credential store, for database logins the user asked to remember.
+    pub logins: Option<Box<dyn LoginStore>>,
+}
+
+/// Keeps database logins between sessions (the system's credential store). Keys are server names
+/// as typed; the store decides how to normalise them.
+pub trait LoginStore {
+    /// The remembered (user, password) for `server`.
+    fn load(&self, server: &str) -> Option<(String, String)>;
+    fn save(&self, server: &str, user: &str, password: &str) -> Result<(), String>;
+    fn forget(&self, server: &str);
 }
 
 /// Shared queue of files read asynchronously (browser file picker, drag and drop).
