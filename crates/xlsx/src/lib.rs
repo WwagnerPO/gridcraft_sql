@@ -13,6 +13,7 @@
 
 mod array_formula;
 mod cfb;
+pub mod cfb_write;
 mod chart;
 mod chartex;
 mod connections;
@@ -23,6 +24,7 @@ mod feature_bags;
 mod fmla;
 mod mashup;
 mod ods;
+pub mod ovba;
 mod package;
 mod passthrough;
 mod pivot;

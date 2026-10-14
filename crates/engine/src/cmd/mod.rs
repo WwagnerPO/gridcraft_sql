@@ -21,6 +21,7 @@ pub mod sheet;
 pub mod slicer;
 pub mod solver;
 pub mod spelling;
+pub mod vba;
 pub mod view;
 pub mod whatif;
 
@@ -134,6 +135,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(data::specs());
         v.extend(connections::specs());
         v.extend(dbwrite::specs());
+        v.extend(vba::specs());
         v.extend(formulas::specs());
         v.extend(review::specs());
         v.extend(view::specs());
