@@ -23,6 +23,7 @@ pub mod i18n;
 pub mod icons;
 pub mod keymap;
 pub mod keytips;
+pub mod macros;
 pub mod outline;
 pub mod panes;
 pub mod paper_view;
@@ -236,6 +237,10 @@ pub struct SheetApp {
     pub notice: Option<Notice>,
     /// When each query with a refresh interval last refreshed: (document uid, query name, ms).
     pub query_timers: Vec<(u64, String, f64)>,
+    /// A VBA macro running on its worker (it holds the session meanwhile).
+    pub macro_run: Option<macros::MacroRun>,
+    /// Workbooks (by uid) whose macros the user enabled.
+    pub macros_enabled: Vec<u64>,
     pub services: Services,
     pub printing: printing::State,
     print_feedback_seen: Option<printing::Feedback>,
@@ -293,6 +298,8 @@ impl SheetApp {
             toast: None,
             notice: None,
             query_timers: vec![],
+            macro_run: None,
+            macros_enabled: vec![],
             services,
             printing: Default::default(),
             print_feedback_seen: None,
@@ -519,6 +526,13 @@ impl SheetApp {
         // Programmatic callers use `run` and keep getting the PDF bytes back.
         if id == "file.exportPdf" && self.services.pick_save.is_some() && params.get("path").and_then(Json::as_str).is_none_or(str::is_empty) {
             return self.export_pdf_with_picker(params);
+        }
+        // A macro run from the interface gets real message boxes.
+        if id == "vba.run"
+            && let Some(name) = params.get("macro").or_else(|| params.get("name")).and_then(Json::as_str)
+        {
+            let name = name.to_string();
+            return macros::start(self, &name);
         }
         // Refresh asks for a database login when the server has none, then refreshes.
         if matches!(id, "data.refresh" | "data.refreshAll") {
@@ -758,6 +772,7 @@ impl SheetApp {
                     dl(&name, &b);
                 }
             }
+            "enableMacros" => macros::enable(self),
             // File › Options (`file.options`) and the File tab itself open the Backstage view.
             "options" => self.open_backstage(backstage::Page::Options),
             "backstage" => {
@@ -821,9 +836,9 @@ impl SheetApp {
         let vba: Vec<&str> = msgs.iter().copied().filter(|m| m.to_lowercase().contains("macro") || m.contains("VBA")).collect();
         if !vba.is_empty() {
             self.notice = Some(Notice {
-                text: "This workbook contains VBA macros. GridCraft keeps them intact when you save, but does not run them.".into(),
+                text: "SECURITY WARNING Macros have been disabled. Enable them only if you trust where this workbook came from.".into(),
                 kind: NoticeKind::Warning,
-                action: Some(("What this means".into(), "macros".into())),
+                action: Some(("Enable Content".into(), "enableMacros".into())),
             });
         } else {
             let text = if msgs.len() == 1 {
@@ -1010,6 +1025,10 @@ impl SheetApp {
 
     /// Per-frame logic (control channel, screenshots). Call before `ui`.
     pub fn logic(&mut self, ctx: &egui::Context) {
+        // While a macro runs its worker owns the session: nothing here may touch it.
+        if self.macro_run.is_some() {
+            return;
+        }
         // A keytip control request lives one frame: the ribbon consumes it during `ui`, and
         // anything that never reached a control (collapsed ribbon, tab switch) is dropped.
         self.ui.keytip_invoke = None;
@@ -1116,6 +1135,9 @@ impl SheetApp {
         self.poll_printing(&ctx);
         if !self.fonts_ready || self.fonts_rebind {
             ctx.request_repaint();
+            return;
+        }
+        if macros::frame(self, ui) {
             return;
         }
         let t0 = now_ms();

@@ -536,6 +536,22 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         }
         "Remember on this computer" => "Recordar en este equipo",
         "The login couldn't be remembered:" => "No se pudo recordar el inicio de sesión:",
+        // Macros
+        "Macro" => "Macro",
+        "Running macro" => "Ejecutando la macro",
+        "Stop macro" => "Detener la macro",
+        "Macro finished:" => "Macro terminada:",
+        "This workbook has no macros." => "Este libro no tiene macros.",
+        "GridCraft scripts" => "Scripts de GridCraft",
+        "Yes" => "Sí",
+        "No" => "No",
+        "Abort" => "Anular",
+        "Retry" => "Reintentar",
+        "Ignore" => "Omitir",
+        "Enable Content" => "Habilitar contenido",
+        "SECURITY WARNING Macros have been disabled. Enable them only if you trust where this workbook came from." => {
+            "ADVERTENCIA DE SEGURIDAD Las macros se han deshabilitado. Habilítelas solo si confía en el origen de este libro."
+        }
         _ => return None,
     })
 }

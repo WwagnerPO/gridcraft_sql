@@ -1804,9 +1804,35 @@ impl Host for ExcelHost<'_> {
     }
 }
 
+fn program(bin: &[u8]) -> Result<gridcraft_vba::Program, String> {
+    let proj = gridcraft_xlsx::ovba::read_project(bin)?;
+    let sources: Vec<(String, String)> = proj.modules.iter().map(|m| (m.name.clone(), m.source.clone())).collect();
+    gridcraft_vba::Program::parse(&sources).map_err(|e| e.to_string())
+}
+
+/// The runnable macros of a VBA project (`Module1.Main`…).
+pub fn macro_names(bin: &[u8]) -> Result<Vec<String>, String> {
+    Ok(program(bin)?.macros())
+}
+
+/// Every procedure of a VBA project, private ones and event handlers included.
+pub fn all_procedures(bin: &[u8]) -> Result<Vec<String>, String> {
+    Ok(program(bin)?.procedures())
+}
+
 /// Runs macro `name` (`Proc` or `Module.Proc`) of the active workbook's VBA project. Everything
 /// it changes undoes as one step. Not journaled itself: replaying a journal never re-runs it.
 pub fn run_macro(s: &mut Session, name: &str, ui: &mut dyn MacroUi) -> Result<V, VbaError> {
+    run_macro_with(s, name, ui, None)
+}
+
+/// [`run_macro`] that stops when `cancel` becomes true.
+pub fn run_macro_with(
+    s: &mut Session,
+    name: &str,
+    ui: &mut dyn MacroUi,
+    cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) -> Result<V, VbaError> {
     let proj = crate::cmd::vba::project(s).map_err(engine_err)?.ok_or_else(|| err(35, "This workbook has no macros"))?;
     let sources: Vec<(String, String)> = proj.modules.iter().map(|m| (m.name.clone(), m.source.clone())).collect();
     let program = gridcraft_vba::Program::parse(&sources)?;
@@ -1816,6 +1842,9 @@ pub fn run_macro(s: &mut Session, name: &str, ui: &mut dyn MacroUi) -> Result<V,
     let result = {
         let mut host = ExcelHost::new(s, ui);
         let mut interp = gridcraft_vba::Interp::new(program, &mut host);
+        if let Some(c) = cancel {
+            interp.set_cancel(c);
+        }
         interp.run(name, vec![])
     };
     // One undo step for the whole macro: keep the state from before it, drop the rest.
@@ -1833,6 +1862,10 @@ pub fn run_macro(s: &mut Session, name: &str, ui: &mut dyn MacroUi) -> Result<V,
     // `End` stops the macro without an error.
     match result {
         Err(e) if e.number == -1 => Ok(V::Empty),
+        Err(mut e) if e.number == -2 => {
+            e.number = 18;
+            Err(e)
+        }
         other => other,
     }
 }

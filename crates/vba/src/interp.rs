@@ -97,6 +97,24 @@ impl Program {
         Ok(Program::new(modules))
     }
 
+    /// Runnable macros: public Subs with no required arguments, as `Module.Proc`.
+    pub fn macros(&self) -> Vec<String> {
+        let mut out = vec![];
+        for m in &self.modules {
+            for p in &m.procs {
+                if p.kind == ProcKind::Sub && p.public && p.params.iter().all(|a| a.optional || a.param_array) {
+                    out.push(format!("{}.{}", m.name, p.name));
+                }
+            }
+        }
+        out
+    }
+
+    /// Every procedure, public or not, as `Module.Proc`.
+    pub fn procedures(&self) -> Vec<String> {
+        self.modules.iter().flat_map(|m| m.procs.iter().map(move |p| format!("{}.{}", m.name, p.name))).collect()
+    }
+
     /// Every public and private procedure, as (module index, procedure index).
     fn find_proc(&self, name: &str, from_module: Option<usize>) -> Option<(usize, usize)> {
         // A module's own procedures first, then any public one.
@@ -135,6 +153,8 @@ pub struct Interp<'h> {
     /// The last error raised, for `Err`.
     last_error: Option<VbaError>,
     err_cleared: bool,
+    /// Set from another thread to stop the macro (the Stop button).
+    cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 }
 
 impl<'h> Interp<'h> {
@@ -152,6 +172,7 @@ impl<'h> Interp<'h> {
             text_compare: false,
             last_error: None,
             err_cleared: true,
+            cancel: None,
         };
         it.load_module_level();
         it
@@ -259,23 +280,33 @@ impl<'h> Interp<'h> {
 
     /// The names of the runnable macros (public Subs with no required arguments).
     pub fn macros(&self) -> Vec<String> {
-        let mut out = vec![];
-        for m in &self.program.modules {
-            for p in &m.procs {
-                if p.kind == ProcKind::Sub && p.public && p.params.iter().all(|a| a.optional || a.param_array) {
-                    out.push(format!("{}.{}", m.name, p.name));
-                }
-            }
-        }
-        out
+        self.program.macros()
     }
 
     // ------------------------------------------------------------ calls
+
+    /// Stops the run when `flag` becomes true (checked every few hundred statements).
+    pub fn set_cancel(&mut self, flag: std::sync::Arc<std::sync::atomic::AtomicBool>) {
+        self.cancel = Some(flag);
+    }
 
     fn step(&mut self) -> Result<(), VbaError> {
         self.steps += 1;
         if self.steps > MAX_STEPS {
             return Err(err(28, "The macro ran too long and was stopped"));
+        }
+        if self.steps.is_multiple_of(256)
+            && let Some(c) = &self.cancel
+            && c.load(std::sync::atomic::Ordering::Relaxed)
+        {
+            // Not trappable by On Error: number -2 unwinds like End.
+            return Err(VbaError {
+                number: -2,
+                description: "Code execution has been interrupted".into(),
+                source: String::new(),
+                line: None,
+                module: None,
+            });
         }
         Ok(())
     }

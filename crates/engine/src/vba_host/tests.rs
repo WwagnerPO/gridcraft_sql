@@ -195,3 +195,9 @@ fn hostile_macros_never_panic() {
         assert!(!matches!(r, Err(crate::EngineError::Internal(..))), "{code}: {r:?}");
     }
 }
+
+#[test]
+fn a_session_can_run_on_a_worker_thread() {
+    fn assert_send<T: Send>() {}
+    assert_send::<Session>();
+}
