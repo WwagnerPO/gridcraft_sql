@@ -31,6 +31,8 @@ pub const TABLE: &[(&str, Class)] = &[
     ("pdf", Class::Layer(0)),
     ("formula", Class::Layer(1)),
     ("functions", Class::Layer(1)),
+    // The VBA language (no object model): the engine supplies Excel's objects.
+    ("vba", Class::Layer(1)),
     ("model", Class::Layer(2)),
     ("calc", Class::Layer(2)),
     ("xlsx", Class::Layer(2)),

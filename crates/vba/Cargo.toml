@@ -1,0 +1,13 @@
+[package]
+name = "gridcraft-vba"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "GridCraft VBA: a clean-room interpreter for Visual Basic for Applications (MS-VBAL), independent of any host object model"
+
+[lints]
+workspace = true
+
+[dependencies]
+gridcraft-core = { workspace = true }
+gridcraft-numfmt = { workspace = true }
