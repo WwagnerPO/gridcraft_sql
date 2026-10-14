@@ -231,7 +231,8 @@ pub fn write_xlsx(wb: &Workbook, kind: XlsxKind) -> Result<Vec<u8>, IoError> {
     let mut wb_rels = Rels::default();
     // Connections GridCraft models follow those a kept connections part already holds.
     let kept_connections = crate::passthrough::kept_connections(wb);
-    out.query_ids = crate::connections::ids(wb, kept_connections.map_or(1, |x| crate::connections::max_id(x).saturating_add(1)));
+    out.query_ids =
+        crate::connections::ids(wb, kept_connections.map_or(1, |x| crate::connections::max_id(x).saturating_add(1)), kept_connections.is_some());
     // Kept content first: the chart sheets among the worksheets need their relationship ids.
     let kept = crate::passthrough::write_workbook(wb, &mut wb_rels, &mut out);
     if !wb.connections.is_empty() && kept_connections.is_none() {

@@ -260,3 +260,18 @@ pub(crate) fn encrypt_standard(plain: &[u8], password: &str) -> (Vec<u8>, Vec<u8
     info.extend(encrypt_ecb(&key, &Hash::Sha1.digest(&[&VERIFIER])));
     (info, package(plain.len(), encrypt_ecb(&key, plain)))
 }
+
+/// Standard base64 of `b` (test fixtures that embed binary parts).
+pub fn b64(b: &[u8]) -> String {
+    base64_encode(b)
+}
+
+/// A ZIP holding `parts` (name, bytes).
+#[allow(clippy::unwrap_used)]
+pub fn zip_parts(parts: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut z = crate::package::ZipOut::new();
+    for (name, data) in parts {
+        z.add(name, data).unwrap();
+    }
+    z.finish().unwrap()
+}

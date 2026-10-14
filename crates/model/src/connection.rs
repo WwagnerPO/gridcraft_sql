@@ -117,4 +117,12 @@ pub struct Connection {
     /// How many rows the last refresh loaded.
     #[serde(default)]
     pub rows: u64,
+    /// The Power Query (by name) this connection came from in an Excel file. Its M formula and
+    /// connection stay in the file unchanged; GridCraft runs the same SQL itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub power_query: Option<String>,
+    /// Its `<connection>` element is in the connections part kept from the file (set when the
+    /// file has a Power Query): saving leaves that element as it is.
+    #[serde(skip)]
+    pub kept: bool,
 }

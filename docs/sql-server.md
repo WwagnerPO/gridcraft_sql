@@ -79,6 +79,14 @@ file whose connections are all of this kind reopens with its queries refreshable
 (Power Query, ODBC, Windows sign-in…) are kept unchanged on save, and queries added in GridCraft
 are added next to them.
 
+**Power Query from Excel.** A query made in Excel with Get Data › From SQL Server is a Power
+Query: an M formula in the file plus a `Microsoft.Mashup.OleDb.1` connection. When the M only reads
+SQL Server, `Sql.Database("server", "db", [Query="…"])` or a table picked in the Navigator
+(`Source{[Schema="dbo",Item="T"]}[Data]`), GridCraft shows it in Queries & Connections and
+refreshes it by running the same SQL itself; saving keeps the Power Query exactly as Excel wrote
+it. Its SQL or table can only be changed in Excel. Queries with Power Query steps (filters,
+merges, changed types, other sources) are kept unchanged but not shown.
+
 ## Commands (CLI, MCP, control channel)
 
 | Command | Does |

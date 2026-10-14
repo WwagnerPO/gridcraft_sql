@@ -184,14 +184,29 @@ fn identifier_parts(text: &str) -> Option<Vec<String>> {
 
 /// The connection id each query table refers to: (table name, lower case → id), ids from
 /// `first_id` in [`Workbook::connections`] order.
-pub fn ids(wb: &Workbook, first_id: u32) -> Vec<(String, u32)> {
-    wb.connections.iter().enumerate().map(|(i, c)| (c.table.to_lowercase(), first_id.saturating_add(i as u32))).collect()
+pub fn ids(wb: &Workbook, first_id: u32, kept: bool) -> Vec<(String, u32)> {
+    let mut next = first_id;
+    wb.connections
+        .iter()
+        .map(|c| {
+            // A Power Query connection keeps its id in the kept connections part.
+            let id = if kept && c.kept {
+                c.id
+            } else {
+                next = next.saturating_add(1);
+                next - 1
+            };
+            (c.table.to_lowercase(), id)
+        })
+        .collect()
 }
 
 /// The `<connection>` elements of the workbook's connections, ids from `first_id`.
-pub fn connection_elements(wb: &Workbook, first_id: u32) -> String {
+pub fn connection_elements(wb: &Workbook, first_id: u32, kept: bool) -> String {
     let mut s = String::new();
-    for (i, c) in wb.connections.iter().enumerate() {
+    // Power Query connections stay as they are in a kept part; without one they are written as
+    // plain SQL Server connections.
+    for (i, c) in wb.connections.iter().filter(|c| !(kept && c.kept)).enumerate() {
         let id = first_id.saturating_add(i as u32);
         let _ = write!(s, "<connection id=\"{id}\"");
         if c.refresh_minutes > 0 {
@@ -217,7 +232,7 @@ pub fn connection_elements(wb: &Workbook, first_id: u32) -> String {
 pub fn connections_part(wb: &Workbook) -> String {
     format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<connections xmlns=\"{NS_MAIN}\">{}</connections>",
-        connection_elements(wb, 1)
+        connection_elements(wb, 1, false)
     )
 }
 
@@ -260,7 +275,7 @@ pub fn merge(existing: &[u8], elements: &str) -> Option<Vec<u8>> {
 /// The connections of a connections part, when GridCraft models every one of them: SQL Server
 /// through OLE DB, filling one of the tables in `query_tables` (table name → connection id).
 /// `None` keeps the part as it is.
-pub fn read(x: &El, query_tables: &[(String, u32)]) -> Option<Vec<Connection>> {
+pub fn read(x: &El, query_tables: &[(String, u32)], mashup: &[crate::mashup::SqlQuery]) -> Option<Vec<Connection>> {
     let mut out = vec![];
     for c in x.kids("connection") {
         let id = c.attr_u32("id")?;
@@ -271,6 +286,35 @@ pub fn read(x: &El, query_tables: &[(String, u32)]) -> Option<Vec<Connection>> {
         let kv = parse_connection_string(db.attr("connection")?);
         let get = |k: &str| kv.iter().find(|(key, _)| key == k).map(|(_, v)| v.as_str());
         let provider = get("provider")?.to_ascii_lowercase();
+        // A Power Query connection: its query, if it only reads SQL Server.
+        if provider.starts_with("microsoft.mashup.oledb") {
+            let location = get("location")?;
+            let q = mashup.iter().find(|q| q.name == location)?;
+            let table = query_tables.iter().find(|(_, cid)| *cid == id).map(|(t, _)| t.clone())?;
+            out.push(Connection {
+                id,
+                name: c.attr("name").unwrap_or(location).to_string(),
+                description: c.attr("description").unwrap_or("").to_string(),
+                source: DataSource::SqlServer {
+                    server: q.server.clone(),
+                    database: q.database.clone(),
+                    encrypt: true,
+                    trust_server_certificate: false,
+                    auth: SqlAuth::Sql,
+                },
+                user: String::new(),
+                command: q.command.clone(),
+                table,
+                refresh_on_open: c.flag("refreshOnLoad", false),
+                refresh_minutes: c.attr_u32("interval").unwrap_or(0).min(32_767),
+                refreshed: None,
+                rows: 0,
+                power_query: Some(location.to_string()),
+                kept: false,
+            });
+            continue;
+        }
+        let power_query = None;
         if !(provider.starts_with("sqloledb") || provider.starts_with("msoledbsql") || provider.starts_with("sqlncli")) {
             return None;
         }
@@ -318,6 +362,8 @@ pub fn read(x: &El, query_tables: &[(String, u32)]) -> Option<Vec<Connection>> {
             refresh_minutes: c.attr_u32("interval").unwrap_or(0).min(32_767),
             refreshed: None,
             rows: 0,
+            power_query,
+            kept: false,
         });
     }
     // Names must be unique for Queries & Connections.
@@ -357,6 +403,8 @@ mod tests {
             refresh_minutes: 15,
             refreshed: None,
             rows: 0,
+            power_query: None,
+            kept: false,
         }
     }
 
@@ -390,14 +438,14 @@ mod tests {
         let part = connections_part(&wb);
         let x = crate::xml::parse(part.as_bytes()).unwrap();
         let tables = vec![("dbo_Customers".to_string(), 1), ("Query1".to_string(), 2)];
-        let back = read(&x, &tables).unwrap();
+        let back = read(&x, &tables, &[]).unwrap();
         assert_eq!(back.len(), 2);
         assert_eq!(back[0], Connection { refreshed: None, rows: 0, ..conn() });
         assert_eq!(back[1].command, QueryCommand::Sql { text: "SELECT 1 AS \"a<b\"".into() });
         // A connection with no table to fill isn't modelled: the part is kept as it is.
-        assert!(read(&x, &tables[..1]).is_none());
+        assert!(read(&x, &tables[..1], &[]).is_none());
         assert_eq!(max_id(part.as_bytes()), 2);
-        let merged = merge(part.as_bytes(), &connection_elements(&wb, 3)).unwrap();
+        let merged = merge(part.as_bytes(), &connection_elements(&wb, 3, true)).unwrap();
         assert_eq!(max_id(&merged), 4);
         assert!(merge(b"<x/>", "").is_none());
     }
@@ -406,10 +454,10 @@ mod tests {
     fn other_connections_are_left_alone() {
         let mashup = r#"<connections xmlns="x"><connection id="1" name="Query - T" type="5"><dbPr connection="Provider=Microsoft.Mashup.OleDb.1;Data Source=$Workbook$;Location=T" command="SELECT * FROM [T]"/></connection></connections>"#;
         let x = crate::xml::parse(mashup.as_bytes()).unwrap();
-        assert!(read(&x, &[("t".into(), 1)]).is_none());
+        assert!(read(&x, &[("t".into(), 1)], &[]).is_none());
         let windows = r#"<connections xmlns="x"><connection id="1" name="q" type="5"><dbPr connection="Provider=SQLOLEDB.1;Integrated Security=SSPI;Data Source=s" command="SELECT 1" commandType="2"/></connection></connections>"#;
         let x = crate::xml::parse(windows.as_bytes()).unwrap();
-        let c = read(&x, &[("t".into(), 1)]).unwrap();
+        let c = read(&x, &[("t".into(), 1)], &[]).unwrap();
         assert_eq!(c[0].source.auth(), SqlAuth::Integrated);
         assert!(connection_string(&c[0]).contains("Integrated Security=SSPI"));
     }
@@ -428,5 +476,120 @@ mod tests {
         let el = crate::xml::parse(x.as_bytes()).unwrap();
         assert_eq!(el.attr_u32("connectionId"), Some(7));
         assert!(x.contains("name=\"A&amp;B\""));
+    }
+}
+
+#[cfg(test)]
+mod power_query_tests {
+    use super::*;
+    use gridcraft_core::{CellRef, RangeRef};
+    use gridcraft_model::{Table, TableColumn, TotalsFn};
+    use std::io::Read as _;
+
+    /// A workbook as Excel saves a Power Query over SQL Server: a mashup connection, its M in a
+    /// DataMashup custom XML part, and a query table bound to the worksheet table.
+    fn excel_power_query_file() -> Vec<u8> {
+        let mut wb = Workbook::new();
+        {
+            let sh = wb.sheet_mut(0).unwrap();
+            for (c, h) in ["device_id", "os"].iter().enumerate() {
+                sh.set_value(CellRef::new(0, c as u32), gridcraft_core::Value::text(*h));
+                sh.set_value(CellRef::new(1, c as u32), gridcraft_core::Value::text("x"));
+            }
+            let col =
+                |n: &str| TableColumn { name: n.into(), totals: TotalsFn::None, totals_label: None, formula: None, unique_name: None, xml: None };
+            sh.tables.push(Table {
+                id: 1,
+                name: "Consulta1".into(),
+                range: RangeRef::parse("A1:B2").unwrap(),
+                header_row: true,
+                totals_row: false,
+                columns: vec![col("device_id"), col("os")],
+                style: "TableStyleMedium2".into(),
+                banded_rows: true,
+                banded_cols: false,
+                first_col: false,
+                last_col: false,
+                filter_button: true,
+                filter: vec![],
+                table_type: None,
+                connection_id: None,
+            });
+        }
+        let plain = crate::write_xlsx(&wb).unwrap();
+        let mut zip = zip::ZipArchive::new(std::io::Cursor::new(plain)).unwrap();
+        let mut parts: Vec<(String, Vec<u8>)> = vec![];
+        for i in 0..zip.len() {
+            let mut f = zip.by_index(i).unwrap();
+            let mut b = vec![];
+            f.read_to_end(&mut b).unwrap();
+            parts.push((f.name().to_string(), b));
+        }
+        let edit = |parts: &mut Vec<(String, Vec<u8>)>, name: &str, f: &dyn Fn(String) -> String| {
+            let p = parts.iter_mut().find(|(n, _)| n == name).unwrap();
+            p.1 = f(String::from_utf8(p.1.clone()).unwrap()).into_bytes();
+        };
+        edit(&mut parts, "xl/tables/table1.xml", &|t| t.replacen("<table ", "<table tableType=\"queryTable\" ", 1));
+        edit(&mut parts, "xl/_rels/workbook.xml.rels", &|t| {
+            t.replace(
+                "</Relationships>",
+                "<Relationship Id=\"rIdC\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/connections\" Target=\"connections.xml\"/><Relationship Id=\"rIdX\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml\" Target=\"../customXml/item1.xml\"/></Relationships>",
+            )
+        });
+        edit(&mut parts, "[Content_Types].xml", &|t| {
+            t.replace("</Types>", &format!("<Override PartName=\"/xl/connections.xml\" ContentType=\"{CT_CONNECTIONS}\"/><Override PartName=\"/xl/queryTables/queryTable1.xml\" ContentType=\"{CT_QUERY_TABLE}\"/></Types>"))
+        });
+        parts.push((
+            "xl/connections.xml".into(),
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><connections xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><connection id="1" keepAlive="1" name="Consulta - Consulta1" type="5" refreshedVersion="8" background="1" saveData="1"><dbPr connection="Provider=Microsoft.Mashup.OleDb.1;Data Source=$Workbook$;Location=Consulta1;Extended Properties=&quot;&quot;" command="SELECT * FROM [Consulta1]"/></connection></connections>"#.to_vec(),
+        ));
+        parts.push(("xl/queryTables/queryTable1.xml".into(), query_table_xml(1, 1, &["device_id".into(), "os".into()]).into_bytes()));
+        parts.push((
+            "xl/tables/_rels/table1.xml.rels".into(),
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/queryTable" Target="../queryTables/queryTable1.xml"/></Relationships>"#.to_vec(),
+        ));
+        let m = "section Section1;\r\nshared Consulta1 = let\r\n    Origen = Sql.Database(\"10.0.0.5\", \"IT\", [Query=\"SELECT * FROM devices\", CreateNavigationProperties=false])\r\nin\r\n    Origen;";
+        let inner = crate::testing::zip_parts(&[("Formulas/Section1.m", m.as_bytes())]);
+        let mut bin = 0u32.to_le_bytes().to_vec();
+        bin.extend((inner.len() as u32).to_le_bytes());
+        bin.extend(&inner);
+        let xml = format!(
+            "<?xml version=\"1.0\" encoding=\"utf-16\"?><DataMashup xmlns=\"http://schemas.microsoft.com/DataMashup\">{}</DataMashup>",
+            crate::testing::b64(&bin)
+        );
+        let mut item = vec![0xFF, 0xFE];
+        for u in xml.encode_utf16() {
+            item.extend(u.to_le_bytes());
+        }
+        parts.push(("customXml/item1.xml".into(), item));
+        let refs: Vec<(&str, &[u8])> = parts.iter().map(|(n, b)| (n.as_str(), b.as_slice())).collect();
+        crate::testing::zip_parts(&refs)
+    }
+
+    #[test]
+    fn a_power_query_over_sql_server_is_a_query_and_survives_saving() {
+        let (wb, _) = crate::read_xlsx(&excel_power_query_file()).unwrap();
+        assert_eq!(wb.connections.len(), 1);
+        let c = &wb.connections[0];
+        assert_eq!((c.source.server(), c.source.database(), c.table.as_str()), ("10.0.0.5", "IT", "Consulta1"));
+        assert_eq!(c.command, QueryCommand::Sql { text: "SELECT * FROM devices".into() });
+        assert_eq!(c.power_query.as_deref(), Some("Consulta1"));
+        // Saved, Excel still finds its Power Query: the mashup connection, the M and the binding.
+        let saved = crate::write_xlsx(&wb).unwrap();
+        let mut zip = zip::ZipArchive::new(std::io::Cursor::new(saved.clone())).unwrap();
+        let mut read = |n: &str| {
+            let mut s = String::new();
+            zip.by_name(n).unwrap().read_to_string(&mut s).unwrap();
+            s
+        };
+        let conns = read("xl/connections.xml");
+        assert_eq!(conns.matches("<connection ").count(), 1, "{conns}");
+        assert!(conns.contains("Microsoft.Mashup.OleDb.1"));
+        assert!(read("xl/queryTables/queryTable1.xml").contains("connectionId=\"1\""));
+        assert!(zip.by_name("customXml/item1.xml").is_ok());
+        // And reopened, it is still the same query.
+        let (again, _) = crate::read_xlsx(&saved).unwrap();
+        assert_eq!(again.connections.len(), 1);
+        assert_eq!(again.connections[0].power_query.as_deref(), Some("Consulta1"));
     }
 }

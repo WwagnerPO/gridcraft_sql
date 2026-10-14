@@ -441,6 +441,11 @@ fn agile(xml: &[u8], package: &[u8], password: &str) -> Result<Vec<u8>, DecryptE
 
 // ---- base64 --------------------------------------------------------------------------------
 
+/// Standard base64 (whitespace ignored) for other readers (Power Query packages).
+pub(crate) fn base64_decode(s: &str) -> Result<Vec<u8>, DecryptError> {
+    base64(s)
+}
+
 /// Standard base64 (whitespace ignored), as Agile's XML uses for every binary value.
 fn base64(s: &str) -> Result<Vec<u8>, DecryptError> {
     let mut out = Vec::with_capacity(s.len() / 4 * 3);

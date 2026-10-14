@@ -344,12 +344,24 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
     }
     wb.preserved = kept.workbook(&mut cx, &wb_part, &wb_xml, &file_to_model);
     // Database connections GridCraft models are read into the workbook and no longer kept.
+    // Power Query definitions that only read SQL Server.
+    let mut mashup = vec![];
+    for r in wb_rels.iter().filter(|r| r.kind.eq_ignore_ascii_case("customXml")) {
+        if let Ok(Some(b)) = cx.pkg.read_limited(&r.target, 32 << 20) {
+            mashup.extend(crate::mashup::sql_queries(&b));
+        }
+    }
     if let Some(r) = find_rel(&wb_rels, "connections").cloned()
         && let Ok(Some(x)) = cx.pkg.read_xml(&r.target)
-        && let Some(list) = crate::connections::read(&x, &cx.query_tables)
+        && let Some(list) = crate::connections::read(&x, &cx.query_tables, &mashup)
     {
         wb.connections = list;
-        if let Some(p) = wb.preserved.as_mut() {
+        // A Power Query keeps its connection (and M) in the file, for Excel.
+        let keep = wb.connections.iter().any(|c| c.power_query.is_some());
+        for c in wb.connections.iter_mut() {
+            c.kept = keep;
+        }
+        if !keep && let Some(p) = wb.preserved.as_mut() {
             let p = std::sync::Arc::make_mut(p);
             p.rels.retain(|k| k.external || !k.rel_type.ends_with("/connections"));
             p.parts.retain(|q| crate::package::normalize(&q.name) != crate::package::normalize(&r.target));

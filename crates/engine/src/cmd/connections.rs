@@ -404,6 +404,8 @@ fn load_new(s: &mut Session, source: &DataSource, user: &str, command: QueryComm
             refresh_minutes: 0,
             refreshed: Some(now),
             rows: rows as u64,
+            power_query: None,
+            kept: false,
         });
         *cx.sel = crate::Selection::at(CellRef::new(0, 0));
         cx.structural = true;
@@ -664,6 +666,11 @@ fn properties(s: &mut Session, p: &Json) -> Result<Json> {
         }
         if let Some(u) = str_param(p, "user") {
             c.user = u.to_string();
+        }
+        if command.is_some() && c.power_query.is_some() {
+            return Err(EngineError::Other(
+                "This query was made with Power Query in Excel; change its source or SQL there. Its name, description and refresh options can be changed here.".into(),
+            ));
         }
         if let Some(cmd) = command {
             if matches!(cmd, QueryCommand::Sql { .. }) && c.source.database().is_empty() {

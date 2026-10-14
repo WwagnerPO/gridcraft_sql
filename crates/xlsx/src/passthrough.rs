@@ -1079,12 +1079,12 @@ pub fn write_workbook(wb: &Workbook, wb_rels: &mut Rels, out: &mut Out) -> Workb
     }
     let mut parts: Vec<PreservedPart> = p.parts.iter().filter(|q| !gone.contains(&normalize(&q.name))).cloned().collect();
     // Connections added in GridCraft join a kept connections part.
-    if !wb.connections.is_empty()
+    if wb.connections.iter().any(|c| !c.kept)
         && let Some(r) = p.rels.iter().find(|r| !r.external && is_kind(r, &["connections"]))
         && let Some(q) = parts.iter_mut().find(|q| normalize(&q.name) == normalize(&r.target))
     {
         let first = crate::connections::max_id(&q.data).saturating_add(1);
-        if let Some(merged) = crate::connections::merge(&q.data, &crate::connections::connection_elements(wb, first)) {
+        if let Some(merged) = crate::connections::merge(&q.data, &crate::connections::connection_elements(wb, first, true)) {
             q.data = merged.into();
         }
     }
