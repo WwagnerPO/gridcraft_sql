@@ -775,6 +775,17 @@ impl<'h> Interp<'h> {
         if key == "\u{0}paren" {
             return Ok(args.first().cloned().unwrap_or(Value::Empty));
         }
+        // 0) Literal keywords.
+        if args.is_empty() {
+            match key.as_str() {
+                "true" => return Ok(Value::Bool(true)),
+                "false" => return Ok(Value::Bool(false)),
+                "nothing" => return Ok(Value::Nothing),
+                "null" => return Ok(Value::Null),
+                "empty" => return Ok(Value::Empty),
+                _ => {}
+            }
+        }
         // 1) Local or module variable (with indices, that's an array/default-member access).
         if let Some(slot) = scope.vars.get(&key).or_else(|| self.globals.get(&key)).cloned() {
             let v = slot.borrow().clone();

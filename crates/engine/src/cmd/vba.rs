@@ -5,15 +5,58 @@ use serde_json::{Value as Json, json};
 use super::*;
 
 pub fn specs() -> Vec<CommandSpec> {
-    vec![cmd!(
-        query "vba.modules",
-        "VBA Modules",
-        [],
-        None,
-        "{source?: true} → [{name, kind: standard|class|document|form, lines, source?}] the workbook's VBA modules",
-        has_doc,
-        modules
-    )]
+    vec![
+        cmd!(
+            noundo "vba.run",
+            "Run Macro",
+            ["Developer", "Code", "Macros"],
+            None,
+            "{macro: \"Module1.Main\" | \"Main\", answers?: [msgbox button codes], inputs?: [text]} runs a VBA macro of the workbook; its changes undo as one step → {result, messages, output}",
+            has_doc,
+            run
+        ),
+        cmd!(
+            query "vba.macros",
+            "Macros",
+            ["Developer", "Code"],
+            Some("Alt+F8"),
+            "{} → [\"Module1.Main\", …] the macros you can run (public Subs without required arguments)",
+            has_doc,
+            macros
+        ),
+        cmd!(
+            query "vba.modules",
+            "VBA Modules",
+            [],
+            None,
+            "{source?: true} → [{name, kind: standard|class|document|form, lines, source?}] the workbook's VBA modules",
+            has_doc,
+            modules
+        ),
+    ]
+}
+
+fn macros(s: &mut Session, _: &Json) -> Result<Json> {
+    let Some(proj) = project(s)? else { return Ok(json!([])) };
+    let sources: Vec<(String, String)> = proj.modules.iter().map(|m| (m.name.clone(), m.source.clone())).collect();
+    let program = gridcraft_vba::Program::parse(&sources).map_err(|e| EngineError::Other(e.to_string()))?;
+    let mut ui = crate::vba_host::Headless::default();
+    let mut host = crate::vba_host::ExcelHost::new(s, &mut ui);
+    let names = gridcraft_vba::Interp::new(program, &mut host).macros();
+    Ok(json!(names))
+}
+
+fn run(s: &mut Session, p: &Json) -> Result<Json> {
+    let name = str_param(p, "macro").or_else(|| str_param(p, "name")).ok_or_else(|| bad("vba.run", "missing `macro`"))?.to_string();
+    let mut ui = crate::vba_host::Headless::default();
+    if let Some(a) = p.get("answers").and_then(Json::as_array) {
+        ui.answers = a.iter().filter_map(Json::as_i64).collect();
+    }
+    if let Some(a) = p.get("inputs").and_then(Json::as_array) {
+        ui.inputs = a.iter().map(|v| v.as_str().map(str::to_string)).collect();
+    }
+    let r = crate::vba_host::run_macro(s, &name, &mut ui).map_err(|e| EngineError::Other(e.to_string()))?;
+    Ok(json!({"result": r.to_str().unwrap_or_default(), "messages": ui.messages, "output": ui.output}))
 }
 
 pub(crate) fn kind_name(k: gridcraft_xlsx::ovba::ModuleKind) -> &'static str {

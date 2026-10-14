@@ -1773,6 +1773,7 @@ dependencies = [
  "gridcraft-model",
  "gridcraft-numfmt",
  "gridcraft-pdf",
+ "gridcraft-vba",
  "gridcraft-xlsx",
  "image",
  "log",

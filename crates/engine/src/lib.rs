@@ -22,6 +22,7 @@ pub mod pivot_calc;
 pub mod sample;
 pub mod selection;
 pub mod tables;
+pub mod vba_host;
 
 use std::sync::Arc;
 
@@ -298,6 +299,9 @@ impl Session {
 
     pub fn new() -> Session {
         Session::default()
+    }
+    pub fn documents_mut(&mut self) -> &mut [DocState] {
+        &mut self.docs
     }
     pub fn documents(&self) -> &[DocState] {
         &self.docs
