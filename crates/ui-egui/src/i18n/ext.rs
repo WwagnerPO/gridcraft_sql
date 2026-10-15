@@ -131,6 +131,8 @@ fn spanish(text: &str) -> Option<&'static str> {
         "Retry" => "Reintentar",
         "Ignore" => "Omitir",
         "Enable Content" => "Habilitar contenido",
+        "Macros enabled" => "Macros habilitadas",
+        "Macros disabled" => "Macros deshabilitadas",
         "SECURITY WARNING Macros have been disabled. Enable them only if you trust where this workbook came from." => {
             "ADVERTENCIA DE SEGURIDAD Las macros se han deshabilitado. Habilítelas solo si confía en el origen de este libro."
         }

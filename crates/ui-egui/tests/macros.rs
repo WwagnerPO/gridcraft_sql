@@ -124,3 +124,26 @@ fn enable_content_runs_workbook_open() {
     }
     assert_eq!(cell(&h, "C3"), Value::text("abierto"));
 }
+
+#[test]
+fn the_open_message_leaves_macros_to_the_security_bar() {
+    let mut h = harness(&[("Module1", true, "Sub A()\r\nEnd Sub\r\n")]);
+    h.state_mut().message = Some(("GridCraft".into(), "sheet \"X\": controls are kept\n\nmacros (VBA project) were kept but not executed".into()));
+    h.state_mut().notice = Some(gridcraft_ui_egui::Notice {
+        text: "This workbook contains VBA macros.".into(),
+        kind: gridcraft_ui_egui::NoticeKind::Warning,
+        action: Some(("What this means".into(), "macros".into())),
+    });
+    h.run_steps(2);
+    let msg = h.state().message.clone().map(|m| m.1).unwrap_or_default();
+    assert_eq!(msg, "sheet \"X\": controls are kept");
+    assert_eq!(h.state().notice.as_ref().and_then(|n| n.action.clone()).map(|a| a.1), Some("enableMacros".into()));
+    assert!(h.query_by_label("Macros disabled").is_some(), "the status bar says macros are off");
+    // A message that only had the macro line goes away.
+    h.state_mut().message = Some(("GridCraft".into(), "macros (VBA project) were kept but not executed".into()));
+    h.run_steps(2);
+    assert!(h.state().message.is_none());
+    h.state_mut().open_dialog("enableMacros", json!({}));
+    h.run_steps(3);
+    assert!(h.query_by_label("Macros enabled").is_some());
+}

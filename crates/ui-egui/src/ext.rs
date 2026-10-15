@@ -60,8 +60,33 @@ pub fn frame(app: &mut SheetApp, ui: &mut egui::Ui) -> bool {
         return true;
     }
     macro_notice(app);
+    open_message(app);
     get_data::tick(app, &ui.ctx().clone());
     false
+}
+
+/// The import warning the engine words for a build that can't run macros.
+const KEPT_NOT_RUN: &str = "macros (VBA project) were kept but not executed";
+
+/// The open-time message box lists every import warning; the macro one is the security bar's
+/// (with Enable Content), so it leaves the box, and an empty box isn't shown.
+fn open_message(app: &mut SheetApp) {
+    let Some((_, text)) = app.message.as_ref() else { return };
+    if !text.contains(KEPT_NOT_RUN) {
+        return;
+    }
+    let rest = text.split("\n\n").filter(|p| !p.contains(KEPT_NOT_RUN)).collect::<Vec<_>>().join("\n\n");
+    if rest.is_empty() {
+        app.message = None;
+    } else if let Some(m) = app.message.as_mut() {
+        m.1 = rest;
+    }
+}
+
+/// The status bar's macro state for workbook `uid`: its label and whether macros are on.
+pub fn macro_status(app: &SheetApp, uid: u64) -> (&'static str, bool) {
+    let on = app.ext.macros_enabled.contains(&uid);
+    (app.ui.language.tr(if on { "Macros enabled" } else { "Macros disabled" }), on)
 }
 
 /// The open-time "contains VBA macros" notice offers to run them (Enable Content).
