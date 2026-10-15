@@ -12,6 +12,9 @@ Esta copia es GridCraft oficial (`origin` = `storytold/gridcraft`) más dos func
 - `main`: copia exacta del oficial. **Nunca se edita a mano.**
 - `feat/sql-server-connector`: nuestra versión = `main` + nuestros commits.
 
+Remotos: `origin` = oficial (solo descargar), `mio` = https://github.com/WwagnerPO/gridcraft_sql
+(nuestra copia pública; GitHub Actions desactivado para que los workflows del oficial no corran).
+
 ## Actualizar desde el oficial
 
 ```bash
@@ -20,6 +23,7 @@ git fetch origin
 git checkout main && git merge --ff-only origin/main
 git checkout feat/sql-server-connector && git merge main
 cargo xtask ci                          # en esta máquina: WGPU_BACKEND=gl cargo xtask ci
+git push mio feat/sql-server-connector main
 ```
 
 `git config rerere.enabled true` (ya activado) recuerda cómo se resolvió cada conflicto.
