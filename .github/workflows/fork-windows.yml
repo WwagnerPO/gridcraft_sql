@@ -1,0 +1,99 @@
+# Our own Windows build: the MSI installer of this version (SQL Server + VBA macros), published
+# as a GitHub release. Runs when a `v*-sql*` tag is pushed (e.g. v0.7.0-sql.1) or by hand.
+#
+# It reuses upstream's packaging (packaging/windows/package.ps1 + gridcraft.wxs) and only renames
+# the product at build time ("GridCraft SQL", its own UpgradeCode, install folder and registry
+# keys), so it installs next to the official GridCraft instead of replacing it, and nothing in
+# upstream's files changes.
+name: Fork Windows MSI
+
+on:
+  push:
+    tags: ["v*-sql*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version, e.g. 0.7.0-sql.1 (also the release tag, with a leading v)"
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  msi:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fonts (craft-fonts, same pin as upstream releases)
+        uses: actions/checkout@v4
+        with:
+          repository: storytold/craft-fonts
+          ref: abb83316d96aa59c1cf64784289e378fe9fa5695
+          path: craft-fonts
+
+      - name: Toolchains
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal --target x86_64-pc-windows-msvc
+          rustup default stable
+          dotnet tool install --global wix --version 5.0.2
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Rename the product (GridCraft SQL)
+        shell: pwsh
+        run: |
+          $f = 'packaging/windows/gridcraft.wxs'
+          $x = Get-Content $f -Raw
+          $pairs = [ordered]@{
+            'Name="GridCraft"'                              = 'Name="GridCraft SQL"'
+            'Manufacturer="Learning Machines LLC"'          = 'Manufacturer="WwagnerPO"'
+            '5511327B-F305-41BE-92D0-EB84944E7C4D'          = 'CCB98371-F2F4-45EF-9385-D01B51D0B21E'
+            '0507D4B6-12FF-4882-84E1-59083E74A4EB'          = 'B7963FE7-C7A3-414B-B176-7B7122622016'
+            'https://getartcraft.com/apps/gridcraft'        = 'https://github.com/WwagnerPO/gridcraft_sql'
+            'https://discord.gg/artcraft'                   = 'https://github.com/WwagnerPO/gridcraft_sql/issues'
+            'Software\GridCraft'                            = 'Software\GridCraftSQL'
+            'GridCraft.Workbook'                            = 'GridCraftSQL.Workbook'
+            'GridCraft.TextData'                            = 'GridCraftSQL.TextData'
+            'Value="GridCraft" Type'                        = 'Value="GridCraft SQL" Type'
+            'Install GridCraft'                             = 'Install GridCraft SQL'
+            'GridCraft setup'                               = 'GridCraft SQL setup'
+            'Title="GridCraft Setup"'                       = 'Title="GridCraft SQL Setup"'
+          }
+          foreach ($k in $pairs.Keys) {
+            if (-not $x.Contains($k)) { throw "gridcraft.wxs no longer contains: $k (upstream changed it)" }
+            $x = $x.Replace($k, $pairs[$k])
+          }
+          Set-Content $f $x -NoNewline
+
+      - name: Build and package
+        shell: pwsh
+        env:
+          GRIDCRAFT_VERSION: ${{ env.VERSION }}
+          CRAFT_FONTS_DIR: ${{ github.workspace }}\craft-fonts
+          DIST: ${{ github.workspace }}\dist
+        run: |
+          $env:GRIDCRAFT_VERSION = $env:GRIDCRAFT_VERSION.TrimStart('v')
+          pwsh packaging/windows/package.ps1 -Arch x64
+
+      - name: Publish the release (MSI only)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = $env:VERSION.TrimStart('v')
+          $msi = Get-ChildItem dist\*.msi | Select-Object -First 1
+          $named = Join-Path dist "GridCraft-SQL-$v-windows-x64.msi"
+          Move-Item $msi.FullName $named
+          $notes = "GridCraft with SQL Server connections and VBA macros. Windows x64 installer (not code-signed: Windows SmartScreen may ask to confirm)."
+          gh release view "v$v" 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "v$v" $named --clobber
+          } else {
+            gh release create "v$v" $named --title "GridCraft SQL $v" --notes $notes --target $env:GITHUB_SHA
+          }

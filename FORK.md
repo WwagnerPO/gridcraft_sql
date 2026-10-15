@@ -35,6 +35,18 @@ Si hay conflictos:
 - Cualquier otro: casi siempre es una línea de enganche (ver tabla); conservar la línea del
   oficial y volver a añadir la nuestra.
 
+## Publicar el instalador de Windows (.msi)
+
+`.github/workflows/fork-windows.yml` compila en GitHub (Windows, MSVC, WiX 5) con el empaquetado
+del oficial, renombrado a "GridCraft SQL" (se instala junto al GridCraft oficial, sin
+sustituirlo), y publica el `.msi` como release. Se lanza subiendo una etiqueta:
+
+```bash
+git tag v0.7.0-sql.1 && git push mio v0.7.0-sql.1
+```
+
+En el repositorio sólo está activado ese workflow; los del oficial están desactivados.
+
 ## Dónde está nuestro código
 
 Casi todo vive en archivos **solo nuestros**, que el oficial no tiene y por tanto nunca chocan:
