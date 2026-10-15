@@ -13,7 +13,7 @@ Esta copia es GridCraft oficial (`origin` = `storytold/gridcraft`) más dos func
 - `feat/sql-server-connector`: nuestra versión = `main` + nuestros commits.
 
 Remotos: `origin` = oficial (solo descargar), `mio` = https://github.com/WwagnerPO/gridcraft_sql
-(nuestra copia pública; GitHub Actions desactivado para que los workflows del oficial no corran).
+(nuestra copia pública; en GitHub Actions sólo corre nuestro workflow del instalador).
 
 ## Actualizar desde el oficial
 
