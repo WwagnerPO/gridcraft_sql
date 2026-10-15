@@ -1834,7 +1834,7 @@ version = "0.7.0"
 
 [[package]]
 name = "gridcraft-sqlserver"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "futures-util",
  "gridcraft-engine",
@@ -1868,7 +1868,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-vba"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "gridcraft-core",
  "gridcraft-numfmt",
