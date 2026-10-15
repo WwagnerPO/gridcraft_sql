@@ -45,7 +45,9 @@ sustituirlo), y publica el `.msi` como release. Se lanza subiendo una etiqueta:
 git tag v0.7.0-sql.1 && git push mio v0.7.0-sql.1
 ```
 
-En el repositorio sólo está activado ese workflow; los del oficial están desactivados.
+Los workflows del oficial no se activan con estas etiquetas ni con la release; si alguno llega a
+aparecer en la pestaña Actions (p. ej. `CI` al subir `main`), desactivarlo con
+`gh workflow disable <nombre> -R WwagnerPO/gridcraft_sql`.
 
 ## Dónde está nuestro código
 
