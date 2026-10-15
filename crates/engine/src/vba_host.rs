@@ -1848,12 +1848,12 @@ pub fn run_macro_with(
         interp.run(name, vec![])
     };
     // One undo step for the whole macro: keep the state from before it, drop the rest.
-    if let Some(d) = s.documents_mut().iter_mut().find(|d| d.uid == uid)
+    if let Some(d) = s.docs.iter_mut().find(|d| d.uid == uid)
         && d.undo.len() > undo_before + 1
     {
         d.undo.truncate(undo_before + 1);
     }
-    if let Some(d) = s.documents_mut().iter_mut().find(|d| d.uid == uid)
+    if let Some(d) = s.docs.iter_mut().find(|d| d.uid == uid)
         && let Some(e) = d.undo.get_mut(undo_before)
     {
         e.label = format!("Macro {name}");

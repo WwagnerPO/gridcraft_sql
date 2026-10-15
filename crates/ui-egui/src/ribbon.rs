@@ -10,6 +10,8 @@ use crate::keytips::keytip_table;
 use crate::theme::{self, Tokens};
 use crate::widgets::{big_button, color_palette, icon_button, small_button, split_button, toggle_button};
 
+mod database;
+
 pub const TABS: &[&str] = &["Home", "Insert", "Draw", "Page Layout", "Formulas", "Data", "Review", "View", "Automate"];
 
 /// macOS draws the window into the title bar (`with_fullsize_content_view`) and AppKit paints the
@@ -1886,61 +1888,7 @@ fn formulas(app: &mut SheetApp, ui: &mut Ui) {
 }
 
 fn data(app: &mut SheetApp, ui: &mut Ui) {
-    let gd = big_button(ui, Icon::Database, "Get\nData", "Get Data from a file or a database", true);
-    control_keytip(app, ui, &gd, "data.getData");
-    egui::Popup::menu(&gd).show(|ui| {
-        menu_items(
-            app,
-            ui,
-            &[
-                ("From Text/CSV…", "dialog:open", json!({})),
-                ("From SQL Server Database…", "dialog:sqlServer", json!({})),
-                ("From Table/Range", "data.fromTableRange", json!({})),
-                ("-", "", json!({})),
-                ("Data Source Settings…", "dialog:dataSourceSettings", json!({})),
-            ],
-        );
-    });
-    sep(ui);
-    // Queries & Connections
-    let ra = big_button(ui, Icon::Refresh, "Refresh\nAll", "Refresh All", true);
-    control_keytip(app, ui, &ra, "data.refreshAll");
-    egui::Popup::menu(&ra).show(|ui| {
-        menu_items(
-            app,
-            ui,
-            &[
-                ("Refresh All", "data.refreshAll", json!({})),
-                ("Refresh", "data.refresh", json!({})),
-                ("-", "", json!({})),
-                ("Connection Properties…", "dialog:connectionProperties", json!({})),
-            ],
-        );
-    });
-    ui.vertical(|ui| {
-        let __k = small_button(ui, Icon::Database, "Queries & Connections", "Queries & Connections", false);
-        control_keytip(app, ui, &__k, "data.queriesConnections");
-        if __k.clicked() {
-            app.grid.pane = if app.grid.pane.as_deref() == Some("queries") { None } else { Some("queries".into()) };
-        }
-        let __k = small_button(ui, Icon::Settings, "Properties", "Connection Properties", false);
-        control_keytip(app, ui, &__k, "data.connectionProperties");
-        if __k.clicked() {
-            app.open_dialog("connectionProperties", json!({}));
-        }
-    });
-    let db = big_button(ui, Icon::Database, "Database", "Write to a database", true);
-    egui::Popup::menu(&db).show(|ui| {
-        menu_items(
-            app,
-            ui,
-            &[
-                ("Save Changes to Database…", "dialog:saveToDatabase", json!({})),
-                ("Export to SQL Server…", "dialog:exportToSqlServer", json!({})),
-                ("Run SQL…", "dialog:sqlExecute", json!({})),
-            ],
-        );
-    });
+    database::data_groups(app, ui);
     sep(ui);
     ui.vertical(|ui| {
         let __k = small_button(ui, Icon::SortAsc, "", "Sort A to Z", false);

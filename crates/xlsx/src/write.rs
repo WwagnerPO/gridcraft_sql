@@ -126,9 +126,8 @@ pub struct Out {
     pub cell_pictures: crate::richdata::PicturesOut,
     /// Kept (pass-through) parts written so far.
     pub kept: crate::passthrough::KeptOut,
-    /// The connection id of each table a query fills (table name, lower case → id).
-    pub query_ids: Vec<(String, u32)>,
-    pub query_tables: u32,
+    /// Database connections and the query tables bound to them.
+    pub connections: crate::connections::WriteState,
 }
 
 impl Out {
@@ -214,8 +213,7 @@ pub fn write_xlsx(wb: &Workbook, kind: XlsxKind) -> Result<Vec<u8>, IoError> {
         needs_calc: false,
         cell_pictures: Default::default(),
         kept: Default::default(),
-        query_ids: vec![],
-        query_tables: 0,
+        connections: Default::default(),
     };
     out.default_type("rels", "application/vnd.openxmlformats-package.relationships+xml");
     out.default_type("xml", "application/xml");
@@ -229,16 +227,10 @@ pub fn write_xlsx(wb: &Workbook, kind: XlsxKind) -> Result<Vec<u8>, IoError> {
     };
 
     let mut wb_rels = Rels::default();
-    // Connections GridCraft models follow those a kept connections part already holds.
-    let kept_connections = crate::passthrough::kept_connections(wb);
-    out.query_ids =
-        crate::connections::ids(wb, kept_connections.map_or(1, |x| crate::connections::max_id(x).saturating_add(1)), kept_connections.is_some());
+    crate::connections::begin_write(wb, &mut out);
     // Kept content first: the chart sheets among the worksheets need their relationship ids.
     let kept = crate::passthrough::write_workbook(wb, &mut wb_rels, &mut out);
-    if !wb.connections.is_empty() && kept_connections.is_none() {
-        out.part("xl/connections.xml", Some(crate::connections::CT_CONNECTIONS), crate::connections::connections_part(wb).into_bytes());
-        wb_rels.add("connections", "connections.xml");
-    }
+    crate::connections::write_part(wb, &mut out, &mut wb_rels);
     let mut pivots = crate::pivot::PivotWriter::default();
     let mut sheets_xml = String::new();
     let mut sheet_id = 1usize;

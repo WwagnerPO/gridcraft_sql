@@ -9,7 +9,8 @@ use egui_kittest::kittest::Queryable;
 use gridcraft_engine::Session;
 use gridcraft_engine::datasource::{Credential, DataProvider, DbColumn, DbError, DbObject, DbValue, QueryResult, Statement};
 use gridcraft_engine::model::{DataSource, QueryCommand};
-use gridcraft_ui_egui::{LoginStore, SheetApp};
+use gridcraft_ui_egui::SheetApp;
+use gridcraft_ui_egui::get_data::LoginStore;
 use serde_json::{Value as Json, json};
 
 type Harness = egui_kittest::Harness<'static, SheetApp>;

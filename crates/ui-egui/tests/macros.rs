@@ -33,7 +33,7 @@ fn wait(h: &mut Harness) {
     for _ in 0..400 {
         h.run_steps(1);
         std::thread::sleep(std::time::Duration::from_millis(2));
-        if h.state().macro_run.is_none() {
+        if h.state().ext.macro_run.is_none() {
             return;
         }
         if h.query_by_label("Yes").is_some() || h.query_by_label("OK").is_some() {
@@ -59,7 +59,7 @@ fn run_from_the_dialog_and_answer_a_message_box() {
     h.get_by_label("Run").click();
     h.run_steps(1);
     wait(&mut h);
-    assert!(h.state().macro_run.is_some(), "the macro waits on its message box");
+    assert!(h.state().ext.macro_run.is_some(), "the macro waits on its message box");
     if let Some(dir) = std::env::var_os("GRIDCRAFT_SNAPSHOT_DIR") {
         match h.render() {
             Ok(img) => {
@@ -72,11 +72,11 @@ fn run_from_the_dialog_and_answer_a_message_box() {
     for _ in 0..400 {
         h.run_steps(1);
         std::thread::sleep(std::time::Duration::from_millis(2));
-        if h.state().macro_run.is_none() {
+        if h.state().ext.macro_run.is_none() {
             break;
         }
     }
-    assert!(h.state().macro_run.is_none(), "the macro finished and gave the workbook back");
+    assert!(h.state().ext.macro_run.is_none(), "the macro finished and gave the workbook back");
     assert_eq!(cell(&h, "A1"), Value::text("sí"));
     assert_eq!(cell(&h, "A2"), Value::Number(42.0));
     // One undo step undoes the macro.
@@ -89,16 +89,16 @@ fn stop_interrupts_a_runaway_macro() {
     let mut h = harness(&[("Module1", true, "Sub Forever()\r\n    Do\r\n        Range(\"A1\").Value = 1\r\n    Loop\r\nEnd Sub\r\n")]);
     gridcraft_ui_egui::macros::start(h.state_mut(), "Forever");
     h.run_steps(3);
-    assert!(h.state().macro_run.is_some());
+    assert!(h.state().ext.macro_run.is_some());
     h.get_by_label("Stop macro").click();
     for _ in 0..400 {
         h.run_steps(1);
         std::thread::sleep(std::time::Duration::from_millis(2));
-        if h.state().macro_run.is_none() {
+        if h.state().ext.macro_run.is_none() {
             break;
         }
     }
-    assert!(h.state().macro_run.is_none());
+    assert!(h.state().ext.macro_run.is_none());
     let msg = h.state().message.clone().map(|m| m.1).unwrap_or_default();
     assert!(msg.contains("interrupted"), "{msg}");
     assert!(h.state().session.active().is_some(), "the workbook came back");
@@ -118,7 +118,7 @@ fn enable_content_runs_workbook_open() {
     for _ in 0..400 {
         h.run_steps(1);
         std::thread::sleep(std::time::Duration::from_millis(2));
-        if h.state().macro_run.is_none() {
+        if h.state().ext.macro_run.is_none() {
             break;
         }
     }

@@ -10,6 +10,15 @@ use serde_json::{Value as Json, json};
 use crate::SheetApp;
 use crate::dialogs::Dialog;
 
+/// Keeps database logins between sessions (the system's credential store). Keys are server names
+/// as typed; the store decides how to normalise them.
+pub trait LoginStore {
+    /// The remembered (user, password) for `server`.
+    fn load(&self, server: &str) -> Option<(String, String)>;
+    fn save(&self, server: &str, user: &str, password: &str) -> Result<(), String>;
+    fn forget(&self, server: &str);
+}
+
 fn s(d: &Dialog, key: &str) -> String {
     d.values.get(key).and_then(Json::as_str).unwrap_or("").to_string()
 }
@@ -713,10 +722,10 @@ pub fn tick(app: &mut SheetApp, ctx: &egui::Context) {
     let mut next_due = f64::INFINITY;
     for (name, minutes, server) in timed {
         let period = minutes as f64 * 60_000.0;
-        let last = match app.query_timers.iter().find(|(u, n, _)| *u == uid && *n == name) {
+        let last = match app.ext.query_timers.iter().find(|(u, n, _)| *u == uid && *n == name) {
             Some((_, _, t)) => *t,
             None => {
-                app.query_timers.push((uid, name.clone(), now));
+                app.ext.query_timers.push((uid, name.clone(), now));
                 now
             }
         };
@@ -730,7 +739,7 @@ pub fn tick(app: &mut SheetApp, ctx: &egui::Context) {
             if let Err(e) = app.run("data.refresh", json!({"connection": name})) {
                 app.toast = Some((format!("{name}: {}", message(&e)), now));
             }
-            if let Some(t) = app.query_timers.iter_mut().find(|(u, n, _)| *u == uid && *n == name) {
+            if let Some(t) = app.ext.query_timers.iter_mut().find(|(u, n, _)| *u == uid && *n == name) {
                 t.2 = now;
             }
             next_due = next_due.min(period);

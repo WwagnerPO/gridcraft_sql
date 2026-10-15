@@ -8,6 +8,8 @@
 //! Credentials live in the session ([`crate::Session::set_credential`]), never in the workbook or
 //! the journal.
 
+use std::sync::Arc;
+
 use gridcraft_model::{DataSource, QueryCommand};
 
 /// A SQL Server login. `Debug` never shows the password.
@@ -20,6 +22,49 @@ pub struct Credential {
 impl std::fmt::Debug for Credential {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Credential").field("user", &self.user).finish_non_exhaustive()
+    }
+}
+
+/// What a session keeps for the database commands. Memory only: never saved in a workbook or
+/// the journal.
+#[derive(Default)]
+pub struct SessionData {
+    /// Reaches databases for Get Data › From Database; `None` where the host can't (the web).
+    provider: Option<Arc<dyn DataProvider>>,
+    /// Database logins entered this session, by [`credential_key`].
+    credentials: Vec<(String, Credential)>,
+    /// What each query last loaded, for Save to Database.
+    pub(crate) snapshots: Vec<crate::cmd::dbwrite::Snapshot>,
+}
+
+impl crate::Session {
+    /// Installs the provider the database commands reach servers through.
+    pub fn set_data_provider(&mut self, provider: Arc<dyn DataProvider>) {
+        self.data.provider = Some(provider);
+    }
+    pub fn data_provider(&self) -> Option<Arc<dyn DataProvider>> {
+        self.data.provider.clone()
+    }
+    /// Remembers the login for `server` (Data Source Settings), replacing an earlier one.
+    pub fn set_credential(&mut self, server: &str, credential: Credential) {
+        let key = credential_key(server);
+        self.data.credentials.retain(|(k, _)| *k != key);
+        self.data.credentials.push((key, credential));
+    }
+    pub fn credential(&self, server: &str) -> Option<&Credential> {
+        let key = credential_key(server);
+        self.data.credentials.iter().find(|(k, _)| *k == key).map(|(_, c)| c)
+    }
+    /// Forgets the login for `server`; true if there was one.
+    pub fn clear_credential(&mut self, server: &str) -> bool {
+        let key = credential_key(server);
+        let n = self.data.credentials.len();
+        self.data.credentials.retain(|(k, _)| *k != key);
+        n != self.data.credentials.len()
+    }
+    /// The servers with a remembered login, and its user name.
+    pub fn credential_servers(&self) -> Vec<(String, String)> {
+        self.data.credentials.iter().map(|(k, c)| (k.clone(), c.user.clone())).collect()
     }
 }
 

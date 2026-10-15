@@ -197,7 +197,7 @@ fn services() -> Services {
         printers: Some(print::discover()),
         print_native: Some(print::submit()),
         // Agents' test runs (no preferences) never touch the user's credential store.
-        logins: prefs_enabled().then(|| Box::new(logins::SystemLogins) as Box<dyn gridcraft_ui_egui::LoginStore>),
+        logins: prefs_enabled().then(|| Box::new(logins::SystemLogins) as Box<dyn gridcraft_ui_egui::get_data::LoginStore>),
         ..Default::default()
     }
 }

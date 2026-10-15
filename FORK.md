@@ -1,0 +1,70 @@
+# Versión propia de GridCraft (SQL Server + macros VBA)
+
+Esta copia es GridCraft oficial (`origin` = `storytold/gridcraft`) más dos funciones propias:
+
+- **Bases de datos**: Get Data › From SQL Server, Navigator, Refresh, escribir en la base
+  (Save Changes / Export / Run SQL), inicios de sesión recordados, Power Query de Excel.
+- **Macros VBA**: leer `vbaProject.bin`, intérprete VBA, modelo de objetos de Excel, ejecutar
+  macros desde la ventana (Alt+F8, Habilitar contenido → `Workbook_Open`).
+
+## Ramas
+
+- `main`: copia exacta del oficial. **Nunca se edita a mano.**
+- `feat/sql-server-connector`: nuestra versión = `main` + nuestros commits.
+
+## Actualizar desde el oficial
+
+```bash
+git tag backup-$(date +%F)              # vuelta atrás: git reset --hard backup-AAAA-MM-DD
+git fetch origin
+git checkout main && git merge --ff-only origin/main
+git checkout feat/sql-server-connector && git merge main
+cargo xtask ci                          # en esta máquina: WGPU_BACKEND=gl cargo xtask ci
+```
+
+`git config rerere.enabled true` (ya activado) recuerda cómo se resolvió cada conflicto.
+
+Si hay conflictos:
+- `Cargo.lock`: no resolver a mano → `git checkout --theirs Cargo.lock && cargo update -w`.
+- `keytips/keytip_table/generated.rs`: es generado; quedarse con `keytips.json` resuelto y
+  regenerarlo.
+- Cualquier otro: casi siempre es una línea de enganche (ver tabla); conservar la línea del
+  oficial y volver a añadir la nuestra.
+
+## Dónde está nuestro código
+
+Casi todo vive en archivos **solo nuestros**, que el oficial no tiene y por tanto nunca chocan:
+
+| Área | Archivos propios |
+|---|---|
+| Intérprete VBA | `crates/vba/` |
+| Conector SQL Server | `crates/sqlserver/`, `apps/gridcraft/src/logins.rs`, `apps/gridcraft-cli/src/db.rs` |
+| Modelo | `crates/model/src/connection.rs` |
+| XLSX | `crates/xlsx/src/{connections,mashup,ovba,cfb_write}.rs`, `crates/xlsx/src/cfb/streams.rs` |
+| Motor | `crates/engine/src/{datasource,vba_host}.rs`, `crates/engine/src/cmd/{connections,dbwrite,vba}.rs` |
+| Interfaz | `crates/ui-egui/src/{ext,get_data,macros}.rs`, `crates/ui-egui/src/{dialogs,ribbon,icons,i18n}/…` (`ext.rs`, `database.rs`) |
+| Docs | `docs/sql-server.md`, este archivo |
+
+En los archivos **compartidos** sólo hay líneas de enganche (cada una llama a código propio):
+
+| Archivo compartido | Enganche |
+|---|---|
+| `Cargo.toml`, `*/Cargo.toml` | dependencias `gridcraft-vba`, `gridcraft-sqlserver`, `keyring` |
+| `xtask/src/layers.rs` | capas de `vba` (L1) y `sqlserver` (L6) |
+| `model/src/{lib,workbook}.rs` | `mod connection`, campo `Workbook::connections` |
+| `xlsx/src/lib.rs` | `mod` de los módulos propios |
+| `xlsx/src/{read,sheet_read,sheet_write,write,passthrough}.rs` | una llamada a `connections::…` cada uno, campo `Out::connections`, `Ctx::query_tables` |
+| `xlsx/src/cfb.rs` | `mod streams;` |
+| `xlsx/src/{crypto,testing}.rs` | ayudantes base64 / zip |
+| `engine/src/lib.rs` | `mod datasource`, `mod vba_host`, campo `Session::data`, diálogo `sqlServer` en `execute_headless` |
+| `engine/src/cmd/mod.rs` | `mod` y `specs()` de `connections`, `dbwrite`, `vba` |
+| `engine/src/cmd/{extra,insert,pivot}.rs` | Queries & Connections, renombrar tabla, Refresh All |
+| `ui-egui/src/lib.rs` | `mod ext`, campo `SheetApp::ext`, `Services::logins`, llamadas `ext::…` |
+| `ui-egui/src/{dialogs,ribbon,icons,i18n}.rs` | `mod ext;`/`mod database;` y una línea que les llama |
+| `ui-egui/src/{keymap,panes}.rs` | Alt+F8, panel Consultas y conexiones |
+| `ui-egui/src/keytips/*`, `tests/keytips_generated.rs` | keytips que dejan de estar "pendientes" |
+| `apps/gridcraft/src/main.rs`, `apps/gridcraft-cli/src/main.rs` | instalar el proveedor SQL Server y el almacén de logins |
+
+**Regla para código nuevo**: escribirlo en archivos propios y tocar los compartidos sólo con
+una línea que lo llame. Las traducciones nuevas van en `ui-egui/src/i18n/ext.rs`, no en las
+tablas de cada idioma; los docs del oficial (`ROADMAP.md`, `docs/gaps.md`…) no se tocan.

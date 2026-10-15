@@ -30,6 +30,7 @@ macro_rules! outln {
 }
 
 mod check;
+mod db;
 
 use gridcraft_engine::Session;
 use serde_json::{Value, json};
@@ -151,6 +152,7 @@ impl Args {
 // ---------------------------------------------------------------- helpers
 
 fn exec(s: &mut Session, id: &str, params: Value) -> Result<Value, String> {
+    db::install(s);
     let r = s.execute_headless(id, params).map_err(|e| e.to_string());
     if id == "file.open"
         && let Ok(value) = &r
@@ -163,21 +165,14 @@ fn exec(s: &mut Session, id: &str, params: Value) -> Result<Value, String> {
     r
 }
 
-/// A session that can reach databases (`data.fromSqlServer`, `data.refresh`).
-fn new_session() -> Session {
-    let mut s = Session::new();
-    s.set_data_provider(std::sync::Arc::new(gridcraft_sqlserver::SqlServerProvider::default()));
-    s
-}
-
 fn open(path: &str) -> Result<Session, String> {
-    let mut s = new_session();
+    let mut s = Session::new();
     exec(&mut s, "file.open", json!({"path": path}))?;
     Ok(s)
 }
 
 fn blank() -> Session {
-    let mut s = new_session();
+    let mut s = Session::new();
     s.new_workbook();
     s
 }
@@ -395,7 +390,7 @@ fn run(args: &[String]) -> Result<(), String> {
         (Some(_), Some(_)) => return Err("give --in or --sample, not both".into()),
         (Some(p), None) => open(p)?,
         (None, Some(name)) => {
-            let mut s = new_session();
+            let mut s = Session::new();
             exec(&mut s, "file.new", json!({"sample": name}))?;
             s
         }
@@ -442,7 +437,7 @@ fn run(args: &[String]) -> Result<(), String> {
 fn commands(args: &[String]) -> Result<(), String> {
     let a = Args::parse(args, &["search"], &["json"])?;
     let q = a.opt("search").or(a.positional.first().map(String::as_str)).map(str::to_ascii_lowercase);
-    let s = new_session();
+    let s = Session::new();
     let list: Vec<_> = s
         .commands()
         .into_iter()
@@ -481,7 +476,7 @@ fn functions(args: &[String]) -> Result<(), String> {
     if let Some(c) = a.opt("category") {
         p["category"] = json!(c);
     }
-    let mut s = new_session();
+    let mut s = Session::new();
     let v = exec(&mut s, "formulas.functions", p)?;
     if a.has("json") {
         outln!("{}", pretty(&v));
@@ -517,13 +512,13 @@ fn mcp(args: &[String]) -> Result<(), String> {
             let session = match (a.opt("in"), a.opt("sample")) {
                 (Some(p), _) => open(p)?,
                 (None, Some(name)) => {
-                    let mut s = new_session();
+                    let mut s = Session::new();
                     exec(&mut s, "file.new", json!({"sample": name}))?;
                     s
                 }
                 (None, None) => blank(),
             };
-            Box::new(Headless::with_session(session))
+            Box::new(Headless::with_session(db::with_databases(session)))
         }
     };
     eprintln!("gridcraft-cli: MCP server on stdio ({})", backend.describe());

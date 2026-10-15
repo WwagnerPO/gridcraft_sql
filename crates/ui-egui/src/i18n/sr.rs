@@ -163,7 +163,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Custom Sort…" => "Prilagođeno sortiranje…",
         "Filter" => "Filter",
         "Reapply" => "Ponovo primeni",
-        "Get\nData" => "Preuzmi\npodatke",
+        "Get Data\n(Text/CSV)" => "Preuzmi podatke\n(Tekst/CSV)",
         "Remove\nDuplicates" => "Ukloni\nduplikate",
         "Data\nValidation" => "Provera\npodataka",
         "Data Validation" => "Provera podataka",

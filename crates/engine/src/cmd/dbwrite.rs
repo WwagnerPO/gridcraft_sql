@@ -62,9 +62,9 @@ pub struct Snapshot {
 /// Remembers what connection `conn` just loaded into the active workbook.
 pub(crate) fn remember(s: &mut Session, conn: u32, columns: &[String], rows: &[Vec<DbValue>]) {
     let Some(doc) = s.active().map(|d| d.uid) else { return };
-    s.snapshots.retain(|x| !(x.doc == doc && x.connection == conn));
+    s.data.snapshots.retain(|x| !(x.doc == doc && x.connection == conn));
     if rows.len().saturating_mul(columns.len().max(1)) <= MAX_SNAPSHOT_CELLS {
-        s.snapshots.push(Snapshot { doc, connection: conn, columns: columns.to_vec(), rows: rows.to_vec() });
+        s.data.snapshots.push(Snapshot { doc, connection: conn, columns: columns.to_vec(), rows: rows.to_vec() });
     }
 }
 
@@ -422,7 +422,7 @@ fn save(s: &mut Session, p: &Json) -> Result<Json> {
         if matches!(conn.command, QueryCommand::Sql { .. }) {
             return Err(EngineError::Other("Only a query that loads a whole table can be saved back; this one runs a SQL statement.".into()));
         }
-        let snap = s.snapshots.iter().find(|x| x.doc == d.uid && x.connection == conn.id).cloned().ok_or_else(|| {
+        let snap = s.data.snapshots.iter().find(|x| x.doc == d.uid && x.connection == conn.id).cloned().ok_or_else(|| {
             EngineError::Other("Refresh the query before saving changes: GridCraft compares the table with the rows it loaded.".into())
         })?;
         let (si, ti) = d.wb.table(&conn.table).ok_or_else(|| EngineError::Other(format!("The table `{}` is gone.", conn.table)))?;
@@ -713,7 +713,7 @@ mod tests {
         let e = s.execute("data.saveToDatabase", json!({})).unwrap_err().to_string();
         assert!(e.contains("primary key"), "{e}");
         // After reopening (no snapshot), a refresh is needed first.
-        s.snapshots.clear();
+        s.data.snapshots.clear();
         let e = s.execute("data.saveToDatabase", json!({})).unwrap_err().to_string();
         assert!(e.contains("Refresh the query"), "{e}");
         let mut q = session(&db);

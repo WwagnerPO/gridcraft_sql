@@ -258,50 +258,13 @@ pub struct Session {
     /// Review › Notes › Show All Notes: every note is displayed. An application display setting
     /// (like Excel's comment indicator option), so it's not saved in the file.
     pub show_all_notes: bool,
-    /// Reaches databases for Get Data › From Database; `None` where the host can't (the web).
-    data_provider: Option<Arc<dyn datasource::DataProvider>>,
-    /// Database logins entered this session, by [`datasource::credential_key`]. Never saved in a
-    /// workbook or the journal.
-    credentials: Vec<(String, datasource::Credential)>,
-    /// What each query last loaded, for Save to Database (memory only).
-    pub(crate) snapshots: Vec<cmd::dbwrite::Snapshot>,
+    /// Database connections and logins (Get Data › From Database); see [`datasource`].
+    pub(crate) data: datasource::SessionData,
 }
 
 impl Session {
-    /// Installs the provider the database commands reach servers through.
-    pub fn set_data_provider(&mut self, provider: Arc<dyn datasource::DataProvider>) {
-        self.data_provider = Some(provider);
-    }
-    pub fn data_provider(&self) -> Option<Arc<dyn datasource::DataProvider>> {
-        self.data_provider.clone()
-    }
-    /// Remembers the login for `server` (Data Source Settings), replacing an earlier one.
-    pub fn set_credential(&mut self, server: &str, credential: datasource::Credential) {
-        let key = datasource::credential_key(server);
-        self.credentials.retain(|(k, _)| *k != key);
-        self.credentials.push((key, credential));
-    }
-    pub fn credential(&self, server: &str) -> Option<&datasource::Credential> {
-        let key = datasource::credential_key(server);
-        self.credentials.iter().find(|(k, _)| *k == key).map(|(_, c)| c)
-    }
-    /// Forgets the login for `server`; true if there was one.
-    pub fn clear_credential(&mut self, server: &str) -> bool {
-        let key = datasource::credential_key(server);
-        let n = self.credentials.len();
-        self.credentials.retain(|(k, _)| *k != key);
-        n != self.credentials.len()
-    }
-    /// The servers with a remembered login, and its user name.
-    pub fn credential_servers(&self) -> Vec<(String, String)> {
-        self.credentials.iter().map(|(k, c)| (k.clone(), c.user.clone())).collect()
-    }
-
     pub fn new() -> Session {
         Session::default()
-    }
-    pub fn documents_mut(&mut self) -> &mut [DocState] {
-        &mut self.docs
     }
     pub fn documents(&self) -> &[DocState] {
         &self.docs

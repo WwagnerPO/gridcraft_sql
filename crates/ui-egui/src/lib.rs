@@ -14,6 +14,7 @@ pub mod control;
 pub mod credits;
 pub mod dialogs;
 pub mod editor;
+pub mod ext;
 pub mod fonts;
 pub mod formula_bar;
 mod formula_locale;
@@ -199,16 +200,7 @@ pub struct Services {
     /// no intermediate file) — opens the system print dialog on that PDF.
     pub print: Option<Box<dyn Fn(&[u8])>>,
     /// Desktop: the system's credential store, for database logins the user asked to remember.
-    pub logins: Option<Box<dyn LoginStore>>,
-}
-
-/// Keeps database logins between sessions (the system's credential store). Keys are server names
-/// as typed; the store decides how to normalise them.
-pub trait LoginStore {
-    /// The remembered (user, password) for `server`.
-    fn load(&self, server: &str) -> Option<(String, String)>;
-    fn save(&self, server: &str, user: &str, password: &str) -> Result<(), String>;
-    fn forget(&self, server: &str);
+    pub logins: Option<Box<dyn get_data::LoginStore>>,
 }
 
 /// Shared queue of files read asynchronously (browser file picker, drag and drop).
@@ -235,12 +227,8 @@ pub struct SheetApp {
     pub toast: Option<(String, f64)>,
     /// Dismissible info bar under the ribbon (open-time notices).
     pub notice: Option<Notice>,
-    /// When each query with a refresh interval last refreshed: (document uid, query name, ms).
-    pub query_timers: Vec<(u64, String, f64)>,
-    /// A VBA macro running on its worker (it holds the session meanwhile).
-    pub macro_run: Option<macros::MacroRun>,
-    /// Workbooks (by uid) whose macros the user enabled.
-    pub macros_enabled: Vec<u64>,
+    /// State of the database and macro features (see [`ext`]).
+    pub ext: ext::State,
     pub services: Services,
     pub printing: printing::State,
     print_feedback_seen: Option<printing::Feedback>,
@@ -297,9 +285,7 @@ impl SheetApp {
             message: None,
             toast: None,
             notice: None,
-            query_timers: vec![],
-            macro_run: None,
-            macros_enabled: vec![],
+            ext: Default::default(),
             services,
             printing: Default::default(),
             print_feedback_seen: None,
@@ -527,16 +513,8 @@ impl SheetApp {
         if id == "file.exportPdf" && self.services.pick_save.is_some() && params.get("path").and_then(Json::as_str).is_none_or(str::is_empty) {
             return self.export_pdf_with_picker(params);
         }
-        // A macro run from the interface gets real message boxes.
-        if id == "vba.run"
-            && let Some(name) = params.get("macro").or_else(|| params.get("name")).and_then(Json::as_str)
-        {
-            let name = name.to_string();
-            return macros::start(self, &name);
-        }
-        // Refresh asks for a database login when the server has none, then refreshes.
-        if matches!(id, "data.refresh" | "data.refreshAll") {
-            return get_data::refresh_with_login(self, id, params);
+        if ext::run_or_alert(self, id, &params) {
+            return;
         }
         if let Err(e) = self.run(id, params) {
             self.alert(e);
@@ -772,7 +750,7 @@ impl SheetApp {
                     dl(&name, &b);
                 }
             }
-            "enableMacros" => macros::enable(self),
+            name if ext::ui_action(self, name) => {}
             // File › Options (`file.options`) and the File tab itself open the Backstage view.
             "options" => self.open_backstage(backstage::Page::Options),
             "backstage" => {
@@ -816,7 +794,7 @@ impl SheetApp {
             self.ui.recent.truncate(20);
         }
         self.show_open_warnings(r);
-        get_data::refresh_on_open(self);
+        ext::after_open(self);
     }
 
     /// Turns the `warnings` a `file.open` result carries into an info-bar notice, choosing the
@@ -836,9 +814,9 @@ impl SheetApp {
         let vba: Vec<&str> = msgs.iter().copied().filter(|m| m.to_lowercase().contains("macro") || m.contains("VBA")).collect();
         if !vba.is_empty() {
             self.notice = Some(Notice {
-                text: "SECURITY WARNING Macros have been disabled. Enable them only if you trust where this workbook came from.".into(),
+                text: "This workbook contains VBA macros. GridCraft keeps them intact when you save, but does not run them.".into(),
                 kind: NoticeKind::Warning,
-                action: Some(("Enable Content".into(), "enableMacros".into())),
+                action: Some(("What this means".into(), "macros".into())),
             });
         } else {
             let text = if msgs.len() == 1 {
@@ -1025,8 +1003,7 @@ impl SheetApp {
 
     /// Per-frame logic (control channel, screenshots). Call before `ui`.
     pub fn logic(&mut self, ctx: &egui::Context) {
-        // While a macro runs its worker owns the session: nothing here may touch it.
-        if self.macro_run.is_some() {
+        if ext::busy(self) {
             return;
         }
         // A keytip control request lives one frame: the ribbon consumes it during `ui`, and
@@ -1137,11 +1114,10 @@ impl SheetApp {
             ctx.request_repaint();
             return;
         }
-        if macros::frame(self, ui) {
+        if ext::frame(self, ui) {
             return;
         }
         let t0 = now_ms();
-        get_data::tick(self, &ctx);
         text_box::before_ui(self, &ctx);
         // The language the widgets translate with this frame (see `i18n::current`).
         i18n::set_current(&ctx, self.ui.language);

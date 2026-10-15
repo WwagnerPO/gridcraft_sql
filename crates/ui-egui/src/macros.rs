@@ -74,7 +74,7 @@ pub struct MacroRun {
 
 /// Starts macro `name` of the active workbook.
 pub fn start(app: &mut SheetApp, name: &str) {
-    if app.macro_run.is_some() {
+    if app.ext.macro_run.is_some() {
         return;
     }
     if !app.commit_edit(0, 0, false, false) {
@@ -100,7 +100,7 @@ pub fn start(app: &mut SheetApp, name: &str) {
         });
         match spawned {
             Ok(handle) => {
-                app.macro_run = Some(MacroRun {
+                app.ext.macro_run = Some(MacroRun {
                     name: name.into(),
                     rx,
                     handle: Some(handle),
@@ -129,7 +129,7 @@ fn finish(app: &mut SheetApp, name: &str, r: Result<String, String>, output: Vec
 /// Draws the running macro (its questions and a Stop button) instead of the workbook, and
 /// takes the session back when the macro ends. `true` while a macro runs.
 pub fn frame(app: &mut SheetApp, ui: &mut Ui) -> bool {
-    let Some(run) = app.macro_run.as_mut() else { return false };
+    let Some(run) = app.ext.macro_run.as_mut() else { return false };
     while let Ok(ev) = run.rx.try_recv() {
         match ev {
             Event::Ask(a) => run.ask = Some(a),
@@ -142,7 +142,7 @@ pub fn frame(app: &mut SheetApp, ui: &mut Ui) -> bool {
     {
         let name = run.name.clone();
         let output = std::mem::take(&mut run.output);
-        app.macro_run = None;
+        app.ext.macro_run = None;
         match h.join() {
             Ok((session, r)) => {
                 app.session = session;
@@ -264,8 +264,8 @@ pub fn list(app: &SheetApp) -> Vec<String> {
 /// Enable Content: the user trusts the workbook's macros. Runs `Workbook_Open` / `Auto_Open`.
 pub fn enable(app: &mut SheetApp) {
     let Some(uid) = app.session.active().map(|d| d.uid) else { return };
-    if !app.macros_enabled.contains(&uid) {
-        app.macros_enabled.push(uid);
+    if !app.ext.macros_enabled.contains(&uid) {
+        app.ext.macros_enabled.push(uid);
     }
     app.notice = None;
     let names = app

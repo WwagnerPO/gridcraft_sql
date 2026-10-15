@@ -270,6 +270,153 @@ pub fn merge(existing: &[u8], elements: &str) -> Option<Vec<u8>> {
     Some(out.into_bytes())
 }
 
+// ---------------------------------------------------------------- package glue
+//
+// The readers and writers of the package call these with one line each, so the shared files
+// carry as little of the connections code as possible.
+
+/// What writing a workbook tracks for its connections.
+#[derive(Default)]
+pub struct WriteState {
+    /// The connection id of each table a query fills (table name, lower case → id).
+    query_ids: Vec<(String, u32)>,
+    query_tables: u32,
+    /// The workbook keeps a connections part from its file.
+    kept: bool,
+}
+
+fn is_connections(rel_type: &str) -> bool {
+    rel_type.rsplit('/').next().is_some_and(|k| k.eq_ignore_ascii_case("connections"))
+}
+
+/// The bytes of the kept connections part, if the workbook has one.
+fn kept_part(wb: &Workbook) -> Option<&[u8]> {
+    let p = wb.preserved.as_deref()?;
+    let r = p.rels.iter().find(|r| !r.external && is_connections(&r.rel_type))?;
+    let target = crate::package::normalize(&r.target);
+    p.parts.iter().find(|q| crate::package::normalize(&q.name) == target).map(|q| &q.data[..])
+}
+
+/// Reads the workbook's connections (and the Power Query definitions that only read SQL
+/// Server); the ones GridCraft models are no longer kept as pass-through.
+pub(crate) fn read_workbook(cx: &mut crate::read::Ctx<'_>, wb_rels: &[crate::package::Rel], wb: &mut Workbook) {
+    let mut mashup = vec![];
+    for r in wb_rels.iter().filter(|r| r.kind.eq_ignore_ascii_case("customXml")) {
+        if let Ok(Some(b)) = cx.pkg.read_limited(&r.target, 32 << 20) {
+            mashup.extend(crate::mashup::sql_queries(&b));
+        }
+    }
+    let Some(r) = crate::read::find_rel(wb_rels, "connections").cloned() else { return };
+    let Ok(Some(x)) = cx.pkg.read_xml(&r.target) else { return };
+    let Some(list) = read(&x, &cx.query_tables, &mashup) else { return };
+    wb.connections = list;
+    // A Power Query keeps its connection (and M) in the file, for Excel.
+    let keep = wb.connections.iter().any(|c| c.power_query.is_some());
+    for c in wb.connections.iter_mut() {
+        c.kept = keep;
+    }
+    if !keep && let Some(p) = wb.preserved.as_mut() {
+        let p = std::sync::Arc::make_mut(p);
+        p.rels.retain(|k| k.external || !k.rel_type.ends_with("/connections"));
+        p.parts.retain(|q| crate::package::normalize(&q.name) != crate::package::normalize(&r.target));
+    }
+    let rows: Vec<u64> = wb
+        .connections
+        .iter()
+        .map(|c| wb.table(&c.table).and_then(|(si, ti)| wb.sheets.get(si)?.tables.get(ti)?.data_range()).map_or(0, |d| d.height() as u64))
+        .collect();
+    for (c, n) in wb.connections.iter_mut().zip(rows) {
+        c.rows = n;
+    }
+}
+
+/// A query table (`table` at part `target`) names the connection that fills it.
+pub(crate) fn read_table(cx: &mut crate::read::Ctx<'_>, table: &El, target: &str, name: &str) -> Result<(), crate::IoError> {
+    if table.attr("tableType") == Some("queryTable")
+        && let Some(q) = cx.pkg.rels(target)?.into_iter().find(|r| r.kind == "queryTable")
+        && let Ok(Some(qx)) = cx.pkg.read_xml(&q.target)
+        && let Some(id) = qx.attr_u32("connectionId")
+    {
+        cx.query_tables.push((name.to_string(), id));
+    }
+    Ok(())
+}
+
+/// Before the kept parts are written: the ids connections get (GridCraft's follow those a kept
+/// connections part already holds).
+pub(crate) fn begin_write(wb: &Workbook, out: &mut crate::write::Out) {
+    let kept = kept_part(wb);
+    out.connections.kept = kept.is_some();
+    out.connections.query_ids = ids(wb, kept.map_or(1, |x| max_id(x).saturating_add(1)), kept.is_some());
+}
+
+/// After the kept parts: a connections part when the file had none.
+pub(crate) fn write_part(wb: &Workbook, out: &mut crate::write::Out, wb_rels: &mut crate::write::Rels) {
+    if !wb.connections.is_empty() && !out.connections.kept {
+        out.part("xl/connections.xml", Some(CT_CONNECTIONS), connections_part(wb).into_bytes());
+        wb_rels.add("connections", "connections.xml");
+    }
+}
+
+/// Connections added in GridCraft join a kept connections part (`parts` are the kept parts
+/// about to be written).
+pub(crate) fn merge_kept(wb: &Workbook, rels: &[gridcraft_model::PreservedRel], parts: &mut [gridcraft_model::PreservedPart]) {
+    if !wb.connections.iter().any(|c| !c.kept) {
+        return;
+    }
+    let Some(r) = rels.iter().find(|r| !r.external && is_connections(&r.rel_type)) else { return };
+    let target = crate::package::normalize(&r.target);
+    if let Some(q) = parts.iter_mut().find(|q| crate::package::normalize(&q.name) == target) {
+        let first = max_id(&q.data).saturating_add(1);
+        if let Some(merged) = merge(&q.data, &connection_elements(wb, first, true)) {
+            q.data = merged.into();
+        }
+    }
+}
+
+/// Makes table `n` (its XML just written) a query table when a query fills it: marks the table
+/// and its columns, and writes the query table part it points at.
+pub(crate) fn bind_table(t: &gridcraft_model::Table, cols: &[String], n: u32, xml: String, out: &mut crate::write::Out) -> String {
+    let name = t.name.to_lowercase();
+    let Some(cid) = out.connections.query_ids.iter().find(|(tn, _)| *tn == name).map(|(_, id)| *id).filter(|_| t.table_type.is_none()) else {
+        return xml;
+    };
+    out.connections.query_tables += 1;
+    let q = out.connections.query_tables;
+    out.part(&format!("xl/queryTables/queryTable{q}.xml"), Some(CT_QUERY_TABLE), query_table_xml(q, cid, cols).into_bytes());
+    let mut trels = crate::write::Rels::default();
+    trels.add("queryTable", &format!("../queryTables/queryTable{q}.xml"));
+    out.part(&format!("xl/tables/_rels/table{n}.xml.rels"), None, trels.xml().into_bytes());
+    query_table_markup(&xml)
+}
+
+/// `tableType="queryTable"` on the table, and each column's `uniqueName` (unless it has one) and
+/// `queryTableFieldId`.
+fn query_table_markup(xml: &str) -> String {
+    let s = xml.replacen("<table xmlns=", "<table tableType=\"queryTable\" xmlns=", 1);
+    let mut out = String::with_capacity(s.len() + 64);
+    let mut rest = s.as_str();
+    const OPEN: &str = "<tableColumn id=\"";
+    while let Some(at) = rest.find(OPEN) {
+        let (head, tail) = rest.split_at(at + OPEN.len());
+        out.push_str(head);
+        let Some(end) = tail.find('"') else {
+            rest = tail;
+            break;
+        };
+        let (id, after) = tail.split_at(end + 1);
+        out.push_str(id);
+        let id = id.trim_end_matches('"');
+        if !after.starts_with(" uniqueName=") {
+            let _ = write!(out, " uniqueName=\"{id}\"");
+        }
+        let _ = write!(out, " queryTableFieldId=\"{id}\"");
+        rest = after;
+    }
+    out.push_str(rest);
+    out
+}
+
 // ---------------------------------------------------------------- reading
 
 /// The connections of a connections part, when GridCraft models every one of them: SQL Server

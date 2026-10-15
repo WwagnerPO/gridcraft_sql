@@ -12,6 +12,8 @@ use serde_json::{Map, Value as Json, json};
 use crate::SheetApp;
 use crate::theme;
 
+mod ext;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Field {
     Text { key: &'static str, label: &'static str },
@@ -94,17 +96,10 @@ impl Dialog {
         }
     }
 
-    /// The sign-in step of the SQL Server dialog on its own: Refresh asks for a login with it,
-    /// then runs `retry` (a refresh command) with `params` again. An empty `retry` only stores it.
-    pub fn login(server: &str, user: &str, retry: &str, params: Json) -> Option<Dialog> {
-        Some(Dialog::custom(
-            "sqlServer",
-            "SQL Server database",
-            json!({"stage": "credentials", "server": server, "user": user, "retry": retry, "retryParams": params, "encrypt": true}),
-        ))
-    }
-
     pub fn open(app: &mut SheetApp, name: &str, params: Json) -> Option<Dialog> {
+        if let Some(d) = ext::open(app, name, &params) {
+            return d;
+        }
         let sel = app.session.active().map(|d| d.selection.current().a1()).unwrap_or_default();
         let active = app.session.active().map(|d| d.selection.active.a1()).unwrap_or_default();
         let p = |k: &str| params.get(k).cloned().unwrap_or(Json::Null);
@@ -730,7 +725,11 @@ impl Dialog {
                 )
             }
             "journal" => Dialog::custom("journal", "Action Journal", json!({})),
-            "macros" => Dialog::custom("macros", "Macro", json!({})),
+            "macros" => {
+                let mut d = Dialog::custom("macros", "Macros", json!({}));
+                d.result = app.session.run("view.macros", json!({})).ok();
+                d
+            }
             "statistics" => {
                 let mut d = Dialog::custom("statistics", "Workbook Statistics", json!({}));
                 d.result = app.session.run("review.workbookStatistics", json!({})).ok();
@@ -780,58 +779,6 @@ impl Dialog {
                 dialog
             }
             "pickList" => Dialog::custom("pickList", "Pick From List", json!({})),
-            "sqlServer" => Dialog::custom(
-                "sqlServer",
-                "SQL Server database",
-                json!({"stage": "source", "server": p("server").as_str().unwrap_or(""), "database": p("database").as_str().unwrap_or(""), "encrypt": true, "trust": false}),
-            ),
-            "dataSourceSettings" => Dialog::custom("dataSourceSettings", "Data Source Settings", json!({})),
-            // Write dialogs take their values back from `params` after a sign-in.
-            "saveToDatabase" => Dialog::custom("saveToDatabase", "Save Changes to Database", params.clone()),
-            "exportToSqlServer" => Dialog::custom("exportToSqlServer", "Export to SQL Server", params.clone()),
-            "sqlExecute" => Dialog::custom("sqlExecute", "Run SQL", params.clone()),
-            "connectionProperties" => {
-                let name = p("connection").as_str().map(str::to_string).or_else(|| {
-                    let doc = app.session.active()?;
-                    let t = doc.wb.active()?.table_at(doc.selection.active)?;
-                    doc.wb.connections.iter().find(|c| c.table.eq_ignore_ascii_case(&t.name)).map(|c| c.name.clone())
-                });
-                let conn = name.and_then(|n| app.session.active()?.wb.connections.iter().find(|c| c.name.eq_ignore_ascii_case(&n)).cloned());
-                let Some(c) = conn else {
-                    app.message = Some((
-                        "Connection Properties".into(),
-                        "Select a cell in a table loaded from a database, or open Queries & Connections.".into(),
-                    ));
-                    return None;
-                };
-                let sql = match &c.command {
-                    gridcraft_engine::model::QueryCommand::Sql { text } => text.clone(),
-                    _ => String::new(),
-                };
-                let mut fields = vec![
-                    Text { key: "name", label: "Query name:" },
-                    Text { key: "description", label: "Description:" },
-                    Check { key: "refreshOnOpen", label: "Refresh data when opening the file" },
-                    Number { key: "refreshMinutes", label: "Refresh every (minutes, 0 = never):" },
-                ];
-                if !sql.is_empty() {
-                    fields.push(Text { key: "sql", label: "SQL statement:" });
-                }
-                Dialog::form(
-                    "connectionProperties",
-                    "Query Properties",
-                    "data.connectionProperties",
-                    fields,
-                    json!({
-                        "connection": c.name,
-                        "name": c.name,
-                        "description": c.description,
-                        "refreshOnOpen": c.refresh_on_open,
-                        "refreshMinutes": c.refresh_minutes,
-                        "sql": sql,
-                    }),
-                )
-            }
             "saveCopy" => Dialog::custom("saveCopy", "Save a Copy", json!({"format": p("format")})),
             "saveChanges" => Dialog::custom("saveChanges", "Save Changes?", json!({"title": p("title")})),
             "start" => Dialog::custom("start", "GridCraft", json!({})),
@@ -1091,10 +1038,9 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         "recommendedCharts" => 600.0,
         "analysisToolPak" => 420.0,
         "solver" => 460.0,
-        "sqlServer" if matches!(d.values.get("stage").and_then(Json::as_str), Some("navigator" | "preview")) => 680.0,
-        "sqlServer" | "dataSourceSettings" | "saveToDatabase" | "exportToSqlServer" | "sqlExecute" => 440.0,
         _ => 380.0,
     };
+    let width = ext::width(&d).unwrap_or(width);
     let window = egui::Window::new(app.ui.language.tr(&d.title))
         .id(egui::Id::new("dialog").with(&d.name))
         .collapsible(false)
@@ -1106,6 +1052,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
     window.show(ctx, |ui| {
             ui.set_min_width(width - 20.0);
             match d.name.as_str() {
+                name if ext::owns(name) => ext::show(app, ui, &mut d, &mut open),
                 "formatCells" => format_cells(app, ui, &mut d, &mut confirm),
                 "dataValidation" => data_validation_form(ui, &mut d, &mut confirm, &mut open),
                 "insertFunction" => insert_function(app, ui, &mut d, &mut confirm),
@@ -1118,11 +1065,6 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 "selectData" => select_data(app, ui, &mut d, &mut confirm, &mut open),
                 "commandSearch" => command_search(app, ui, &mut d, &mut confirm),
                 "goalSeek" => goal_seek(app, ui, &mut d, &mut confirm),
-                "sqlServer" => crate::get_data::sql_server(app, ui, &mut d, &mut open),
-                "dataSourceSettings" => crate::get_data::data_source_settings(app, ui, &mut d, &mut open),
-                "saveToDatabase" => crate::get_data::save_to_database(app, ui, &mut d, &mut open),
-                "exportToSqlServer" => crate::get_data::export_to_sql_server(app, ui, &mut d, &mut open),
-                "sqlExecute" => crate::get_data::run_sql(app, ui, &mut d, &mut open),
                 "analysisToolPak" => analysis_toolpak(app, ui, &mut d, &mut confirm, &mut open),
                 "solver" => solver(ui, &mut d, &mut confirm, &mut open),
                 "solverResults" => solver_results(app, ui, &mut d, &mut open),
@@ -1142,7 +1084,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                         }
                     });
                 }
-                "macros" => crate::macros::dialog(app, ui, &mut d, &mut open),
+                "macros" => macros(ui, &mut d),
                 "statistics" | "accessibility" | "errorChecking" | "evaluateFormula" | "comments" => {
                     let r = if d.name == "comments" {
                         app.session.active().and_then(|doc| doc.wb.active().map(|s| json!(s.comments.iter().map(|(c, m)| json!({"cell": c.a1(), "author": m.author, "text": m.text})).collect::<Vec<_>>())))
@@ -1561,6 +1503,31 @@ fn about(ui: &mut egui::Ui, d: &mut Dialog) {
 /// The Macros dialog: lists GridCraft's own recorded scripts and (if the file carries one) the
 /// preserved VBA project. Mirrors Excel's Developer ▸ Macros list, but is honest that VBA is
 /// preserved and not executed.
+fn macros(ui: &mut egui::Ui, d: &mut Dialog) {
+    ui.label("Automation in this workbook. GridCraft runs its own scripts; a file's VBA project is preserved but not executed.");
+    ui.add_space(6.0);
+    let items: Vec<Json> = d.result.as_ref().and_then(Json::as_array).cloned().unwrap_or_default();
+    if items.is_empty() {
+        ui.weak("This workbook has no scripts or macros.");
+        return;
+    }
+    egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+        for it in &items {
+            let name = it.get("name").and_then(Json::as_str).unwrap_or("(unnamed)");
+            let is_vba = it.get("kind").and_then(Json::as_str) == Some("vba");
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(name).strong());
+                if is_vba {
+                    ui.weak("— VBA project (preserved, not run)");
+                } else {
+                    let steps = it.get("steps").and_then(Json::as_u64).unwrap_or(0);
+                    ui.weak(format!("— {steps} step{}", if steps == 1 { "" } else { "s" }));
+                }
+            });
+        }
+    });
+}
+
 fn format_cells(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool) {
     // `d.tab` stays the English name (it is what `open_dialog` and tests pass); only the drawn
     // labels are translated. The Fill tab is keyed by context: the Alignment tab's "Fill" is a

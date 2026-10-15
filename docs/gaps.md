@@ -1,6 +1,6 @@
 # Gaps
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-13 · **Change:** minor (§12: Get Data from SQL Server with connections and refresh) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-12 · **Change:** minor (rows auto-fit oversized fonts on open and whole-row/column formatting) · **Target:** Microsoft Excel (Microsoft 365)
 
 Every known shortfall against Excel, one entry each, ranked by user impact (what blocks someone
 using GridCraft for real work first). This is the work list: pick from the top, check the open
@@ -102,12 +102,8 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
   100–165 h including #5. [localization-parity.md](localization-parity.md)
 
 ### 12. Get & Transform, external data, data model (F)
-- From SQL Server Database landed: Navigator with preview, SQL statements, connections saved in the
-  XLSX, Refresh / Refresh All, Queries & Connections, refresh on open and on an interval
-  ([sql-server.md](sql-server.md)). Still missing: the Power Query editor, Windows and Entra
-  sign-in, other databases (ODBC, PostgreSQL, MySQL, Access), From Web and folder sources,
-  relationships and the data model (`data.fromWeb`, `data.relationships` missing). **Estimate:**
-  50–90 h.
+- No Power Query editor, connections, refresh, From Web/database/folder sources, relationships or
+  data model (`data.fromWeb`, `data.relationships` missing). **Estimate:** 60–100 h.
 
 ### 13. Analysis tools: Solver, Analysis ToolPak, Forecast Sheet (F)
 - `data.solver`, `data.analysisToolPak` missing. Forecast Sheet (`data.forecastSheet`) and the
@@ -172,7 +168,6 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-13 | minor | §12: Get Data from SQL Server (Navigator, connections in XLSX, refresh) |
 | 2026-10-12 | minor | rows auto-fit oversized fonts on open and whole-row/column formatting (#833) |
 | 2026-10-12 | minor | Page Layout view: dragging margins on the rulers (#792) removed from the §14 remainder |
 | 2026-10-12 | minor | §13: Forecast Sheet Forecast Start (hindcast) landed (#785) |

@@ -161,7 +161,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Custom Sort…" => "Benutzerdefiniertes Sortieren…",
         "Filter" => "Filtern",
         "Reapply" => "Erneut anwenden",
-        "Get\nData" => "Daten\nabrufen",
+        "Get Data\n(Text/CSV)" => "Daten abrufen\n(Text/CSV)",
         "Remove\nDuplicates" => "Duplikate\nentfernen",
         "Data\nValidation" => "Daten-\nüberprüfung",
         "Data Validation" => "Datenüberprüfung",

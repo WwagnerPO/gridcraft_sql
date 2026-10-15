@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 mod cs;
 mod de;
 mod es;
+mod ext;
 mod fr;
 mod ko;
 mod pt;
@@ -130,6 +131,7 @@ impl Language {
             Self::Fr => fr::translate(text),
             Self::Sr => sr::translate(text),
         };
+        let translated = translated.or_else(|| ext::translate(self, text));
         translated.unwrap_or_else(|| text.rsplit_once('|').map_or(text, |(_, label)| label))
     }
 }
@@ -343,7 +345,7 @@ const JAPANESE: &[(&str, &str)] = &[
     ("Custom Sort…", "ユーザー設定の並べ替え…"),
     ("Filter", "フィルター"),
     ("Reapply", "再適用"),
-    ("Get\nData", "データの\n取得"),
+    ("Get Data\n(Text/CSV)", "データの取得 (テキスト/CSV)"),
     ("Remove\nDuplicates", "重複の削除"),
     ("Data\nValidation", "データの入力規則"),
     ("Data Validation", "データの入力規則"),

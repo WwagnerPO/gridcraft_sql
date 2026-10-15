@@ -1,7 +1,7 @@
 //! Database logins remembered in the system's credential store (Windows Credential Manager,
 //! macOS Keychain, the Secret Service on Linux), for Get Data's "Remember on this computer".
 
-use gridcraft_ui_egui::LoginStore;
+use gridcraft_ui_egui::get_data::LoginStore;
 
 /// The service name the entries are filed under.
 const SERVICE: &str = "GridCraft database login";
