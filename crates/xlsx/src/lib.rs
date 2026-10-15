@@ -22,6 +22,7 @@ mod csv;
 mod drawing;
 mod feature_bags;
 mod fmla;
+pub mod form_controls;
 mod mashup;
 mod ods;
 pub mod ovba;

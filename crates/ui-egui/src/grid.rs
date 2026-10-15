@@ -728,6 +728,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     };
     // Objects above cells.
     let objects = crate::chartview::paint_objects(app, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh);
+    crate::ext::paint_controls(app, &painter.with_clip_rect(geo.cells), &geo, sh);
     paint_overlays(app, ui, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh, &sel);
     if sh.view == gridcraft_engine::model::SheetViewMode::PageBreakPreview {
         paint_pages(app, &painter.with_clip_rect(geo.cells), &geo, sh);
@@ -1890,6 +1891,9 @@ fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &
             }
             return;
         }
+    }
+    if primary_clicked && !resp.drag_started() && pos.is_some_and(|p| crate::ext::click_control(app, geo, sh, p)) {
+        return;
     }
     // A plain click on a slicer value tile toggles it (Ctrl/Cmd for multi-select); the clear
     // button resets it. Runs before the generic object select/drag so tiles stay clickable.

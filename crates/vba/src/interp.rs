@@ -477,7 +477,7 @@ impl<'h> Interp<'h> {
                 Ok(Flow::Normal)
             }
             Stmt::Assign { target, value } => {
-                let v = self.eval(value, scope)?;
+                let v = self.eval_value(value, scope)?;
                 self.assign(target, v, scope, false)?;
                 Ok(Flow::Normal)
             }
@@ -492,7 +492,7 @@ impl<'h> Interp<'h> {
             }
             Stmt::If { branches, otherwise } => {
                 for (cond, body) in branches {
-                    if self.eval(cond, scope)?.to_bool()? {
+                    if self.eval_value(cond, scope)?.to_bool()? {
                         return self.exec_lines(body, scope, ctx);
                     }
                 }
@@ -502,7 +502,7 @@ impl<'h> Interp<'h> {
                 Ok(Flow::Normal)
             }
             Stmt::Select { subject, cases, otherwise } => {
-                let subj = self.eval(subject, scope)?;
+                let subj = self.eval_value(subject, scope)?;
                 for (tests, body) in cases {
                     if self.case_matches(&subj, tests, scope)? {
                         return self.exec_lines(body, scope, ctx);
@@ -574,7 +574,7 @@ impl<'h> Interp<'h> {
             Stmt::DebugPrint(items) => {
                 let mut out = String::new();
                 for it in items {
-                    out.push_str(&self.eval(it, scope)?.to_str().unwrap_or_default());
+                    out.push_str(&self.eval_value(it, scope)?.to_str().unwrap_or_default());
                 }
                 self.host.debug_print(&out);
                 Ok(Flow::Normal)
@@ -602,10 +602,10 @@ impl<'h> Interp<'h> {
         scope: &mut Scope,
         ctx: &mut ProcCtx,
     ) -> Result<Flow, VbaError> {
-        let start = self.eval(from, scope)?.to_f64()?;
-        let end = self.eval(to, scope)?.to_f64()?;
+        let start = self.eval_value(from, scope)?.to_f64()?;
+        let end = self.eval_value(to, scope)?.to_f64()?;
         let step_v = match step {
-            Some(e) => self.eval(e, scope)?.to_f64()?,
+            Some(e) => self.eval_value(e, scope)?.to_f64()?,
             None => 1.0,
         };
         if step_v == 0.0 && start != end {
@@ -666,7 +666,7 @@ impl<'h> Interp<'h> {
         loop {
             self.step()?;
             if let Some((while_cond, e)) = pre {
-                let c = self.eval(e, scope)?.to_bool()?;
+                let c = self.eval_value(e, scope)?.to_bool()?;
                 if c != *while_cond {
                     break;
                 }
@@ -677,7 +677,7 @@ impl<'h> Interp<'h> {
                 other => return Ok(other),
             }
             if let Some((while_cond, e)) = post {
-                let c = self.eval(e, scope)?.to_bool()?;
+                let c = self.eval_value(e, scope)?.to_bool()?;
                 if c != *while_cond {
                     break;
                 }
@@ -689,15 +689,15 @@ impl<'h> Interp<'h> {
     fn case_matches(&mut self, subj: &Value, tests: &[CaseTest], scope: &mut Scope) -> Result<bool, VbaError> {
         for t in tests {
             let hit = match t {
-                CaseTest::Value(e) => value::compare(subj, &self.eval(e, scope)?, self.text_compare)? == std::cmp::Ordering::Equal,
+                CaseTest::Value(e) => value::compare(subj, &self.eval_value(e, scope)?, self.text_compare)? == std::cmp::Ordering::Equal,
                 CaseTest::Range(a, b) => {
-                    let lo = self.eval(a, scope)?;
-                    let hi = self.eval(b, scope)?;
+                    let lo = self.eval_value(a, scope)?;
+                    let hi = self.eval_value(b, scope)?;
                     value::compare(subj, &lo, self.text_compare)? != std::cmp::Ordering::Less
                         && value::compare(subj, &hi, self.text_compare)? != std::cmp::Ordering::Greater
                 }
                 CaseTest::Is(op, e) => {
-                    let r = value::binary(*op, subj, &self.eval(e, scope)?, self.text_compare)?;
+                    let r = value::binary(*op, subj, &self.eval_value(e, scope)?, self.text_compare)?;
                     r.to_bool()?
                 }
             };
@@ -769,8 +769,8 @@ impl<'h> Interp<'h> {
                 };
                 self.member(&o, "Item", &[Value::str(key.as_str())], false)
             }
-            Expr::Unary(UnOp::Neg, inner) => value::negate(&self.eval(inner, scope)?),
-            Expr::Unary(UnOp::Not, inner) => value::not(&self.eval(inner, scope)?),
+            Expr::Unary(UnOp::Neg, inner) => value::negate(&self.eval_value(inner, scope)?),
+            Expr::Unary(UnOp::Not, inner) => value::not(&self.eval_value(inner, scope)?),
             Expr::Binary(op, a, b) => self.eval_binary(*op, a, b, scope),
             Expr::New(cls) => self.new_object(cls),
             Expr::TypeOf(e, cls) => {
@@ -789,15 +789,33 @@ impl<'h> Interp<'h> {
         }
     }
 
+    /// An object used where a value is expected gives its default property (`Range("A1")` in
+    /// `x = Range("A1")` or `Len(Range("A1"))` is the cell's value).
+    fn deref(&mut self, v: Value) -> Result<Value, VbaError> {
+        match v {
+            Value::Object(Obj::Host(h)) => self.host.get_member(&h, "_Default", &[]),
+            Value::Object(Obj::Collection(_) | Obj::Dictionary(_) | Obj::Instance(_)) => {
+                Err(err(450, "Wrong number of arguments or invalid property assignment"))
+            }
+            other => Ok(other),
+        }
+    }
+
+    /// `eval`, then the default property of an object.
+    fn eval_value(&mut self, e: &Expr, scope: &mut Scope) -> Result<Value, VbaError> {
+        let v = self.eval(e, scope)?;
+        self.deref(v)
+    }
+
     fn eval_binary(&mut self, op: BinOp, a: &Expr, b: &Expr, scope: &mut Scope) -> Result<Value, VbaError> {
         if op == BinOp::Is {
             let x = self.eval_ref(a, scope)?;
             let y = self.eval_ref(b, scope)?;
             return value::binary(BinOp::Is, &x, &y, false);
         }
-        let x = self.eval(a, scope)?;
+        let x = self.eval_value(a, scope)?;
         // Short-circuit is not VBA semantics; And/Or evaluate both sides.
-        let y = self.eval(b, scope)?;
+        let y = self.eval_value(b, scope)?;
         value::binary(op, &x, &y, self.text_compare)
     }
 
@@ -861,6 +879,36 @@ impl<'h> Interp<'h> {
 
     fn call_builtin(&mut self, name: &str, args: &[Value], _scope: &mut Scope) -> Result<Option<Value>, VbaError> {
         let upper = name.to_ascii_uppercase();
+        // Built-ins work on values: objects give their default property, except where the
+        // function is about the object itself.
+        let keeps_objects = matches!(
+            upper.as_str(),
+            "TYPENAME"
+                | "ISOBJECT"
+                | "VARTYPE"
+                | "ISNULL"
+                | "ISEMPTY"
+                | "ARRAY"
+                | "IIF"
+                | "CHOOSE"
+                | "SWITCH"
+                | "ISARRAY"
+                | "UBOUND"
+                | "LBOUND"
+                | "JOIN"
+                | "FILTER"
+        );
+        let owned: Vec<Value>;
+        let args: &[Value] = if keeps_objects || !args.iter().any(|a| matches!(a, Value::Object(Obj::Host(_)))) {
+            args
+        } else {
+            let mut v = Vec::with_capacity(args.len());
+            for a in args {
+                v.push(self.deref(a.clone())?);
+            }
+            owned = v;
+            &owned
+        };
         match upper.as_str() {
             "MSGBOX" => {
                 let prompt = args.first().map(|v| v.to_str()).transpose()?.unwrap_or_default();

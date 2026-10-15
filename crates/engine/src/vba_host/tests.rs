@@ -201,3 +201,133 @@ fn a_session_can_run_on_a_worker_thread() {
     fn assert_send<T: Send>() {}
     assert_send::<Session>();
 }
+
+/// A sheet with form buttons that run `Stamp`, like an approval sheet: the macro finds its own
+/// button, comments the button's row, and relabels the button.
+fn button_session(protect: bool) -> Session {
+    let code = r#"Attribute VB_Name = "Module1"
+Sub Stamp()
+    Dim ws As Worksheet
+    Dim btn As Shape
+    Dim cell As Range
+    Set ws = ActiveSheet
+    Set btn = ws.Shapes(Application.Caller)
+    Set cell = btn.TopLeftCell
+    On Error Resume Next
+    cell.CommentThreaded.Delete
+    On Error GoTo 0
+    If ws.Cells(cell.Row, 6).Text = "" Then
+        btn.TextFrame.Characters.Text = "Fill F first"
+        Exit Sub
+    End If
+    cell.AddCommentThreaded "Approved by " & Application.UserName
+    btn.TextFrame.Characters.Text = "Approved"
+End Sub
+"#;
+    let mut s = session(code);
+    let p = gridcraft_xlsx::form_controls::sample_preserved(&[
+        (1025, "Button 1", "Click to approve", "Stamp", [1, 5, 2, 3, 3, 8, 2, 18]),
+        (1026, "Button 2", "Click to approve", "Stamp", [1, 5, 3, 3, 3, 8, 3, 18]),
+    ]);
+    {
+        let wb = std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().wb);
+        let sh = wb.sheet_mut(0).unwrap();
+        sh.preserved = Some(std::sync::Arc::new(p));
+    }
+    s.execute("cell.set", json!({"cell": "F4", "input": "INV-1"})).unwrap();
+    if protect {
+        s.execute("review.protectSheet", json!({"password": "x"})).unwrap();
+    }
+    s
+}
+
+#[test]
+fn buttons_run_their_macro_with_application_caller() {
+    let mut s = button_session(false);
+    let list = s.execute("vba.buttons", json!({})).unwrap();
+    assert_eq!(list[0]["name"], "Button 1");
+    assert_eq!(list[0]["macro"], "Stamp");
+    assert_eq!(list[1]["range"], "B4:D4");
+    // Row 3 (Button 1) has no F value: the button says so, no comment.
+    s.execute("vba.click", json!({"button": "Button 1"})).unwrap();
+    let buttons = s.execute("vba.buttons", json!({})).unwrap();
+    assert_eq!(buttons[0]["caption"], "Fill F first");
+    // Row 4 (Button 2) has one: a threaded comment on B4 and the button relabelled.
+    s.execute("vba.click", json!({"button": "Button 2"})).unwrap();
+    let d = s.doc().unwrap();
+    let c = d.wb.active().unwrap().comments.get(&CellRef::parse("B4").unwrap()).cloned().unwrap();
+    assert!(c.threaded);
+    assert!(c.text.starts_with("Approved by "), "{}", c.text);
+    let buttons = s.execute("vba.buttons", json!({})).unwrap();
+    assert_eq!(buttons[1]["caption"], "Approved");
+}
+
+#[test]
+fn buttons_on_a_protected_sheet() {
+    let mut s = button_session(true);
+    s.execute("vba.click", json!({"button": "Button 2"})).unwrap();
+    let buttons = s.execute("vba.buttons", json!({})).unwrap();
+    assert_eq!(buttons[1]["caption"], "Approved");
+}
+
+#[test]
+fn a_button_with_no_macro_and_a_missing_button() {
+    let mut s = button_session(false);
+    assert!(s.execute("vba.click", json!({"button": "Button 99"})).is_err());
+    // Run without a button: Application.Caller is an error value, Shapes() fails cleanly.
+    let e = s.execute("vba.run", json!({"macro": "Stamp"})).unwrap_err().to_string();
+    assert!(e.contains("13") || e.contains("1004"), "{e}");
+}
+
+#[test]
+fn files_through_adodb_stream_dir_and_kill() {
+    let dir = std::env::temp_dir().join(format!("gridcraft-vba-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("out.csv");
+    let path_s = path.to_string_lossy().replace('"', "\"\"");
+    let code = format!(
+        r#"Sub Csv()
+    Dim f As String
+    f = "{path_s}"
+    Range("A1:A3").Value = "x"
+    Range("A2").Value = "año"
+    If Len(Dir(f)) > 0 Then Kill f
+    Dim st As Object
+    Set st = CreateObject("ADODB.Stream")
+    st.Type = 2
+    st.Charset = "utf-8"
+    st.Open
+    Dim r As Long
+    For r = 1 To 3
+        If Len(ActiveSheet.Cells(r, 1)) > 0 Then st.WriteText ActiveSheet.Cells(r, 1).Value & vbCrLf
+    Next r
+    st.SaveToFile f, 2
+    Range("B1").Value = Dir(f)
+End Sub"#
+    );
+    let mut s = session(&code);
+    std::fs::write(&path, b"old").unwrap();
+    run(&mut s, "Csv");
+    let bytes = std::fs::read(&path).unwrap();
+    assert_eq!(bytes, "\u{feff}x\r\naño\r\nx\r\n".as_bytes());
+    assert_eq!(cell(&s, "B1"), CV::text("out.csv"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn default_member_values() {
+    let mut s = session(
+        r#"Sub D()
+    Dim folder As String
+    Range("P3").Value = "C:\data"
+    folder = Range("P3")
+    Range("A1").Value = folder & "\" & Len(Range("P3"))
+    Range("A2") = Range("P3")
+    If Range("P3") = "C:\data" Then Range("A3").Value = "same"
+End Sub"#,
+    );
+    run(&mut s, "D");
+    assert_eq!(cell(&s, "A1"), CV::text("C:\\data\\7"));
+    assert_eq!(cell(&s, "A2"), CV::text("C:\\data"));
+    assert_eq!(cell(&s, "A3"), CV::text("same"));
+}

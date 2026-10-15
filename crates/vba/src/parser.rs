@@ -1019,7 +1019,6 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Result<Expr, VbaError> {
-        let spaced = self.tok().is_none_or(|t| t.spaced);
         match self.bump() {
             t @ (Tok::Int(..) | Tok::Float(..) | Tok::Str(_) | Tok::Date(_)) => Ok(Expr::Lit(t)),
             Tok::Op("(") => {
@@ -1027,7 +1026,8 @@ impl Parser {
                 self.expect_op(")")?;
                 Ok(Expr::Call(Box::new(Expr::Name("\u{0}paren".into())), vec![Arg { name: None, value: e, by_val: true }]))
             }
-            Tok::Op(".") if spaced || self.i == 1 => {
+            // A leading `.` is always a With member (`Len(.Range("A1"))`); `x.y` is handled in `postfix`.
+            Tok::Op(".") => {
                 let n = self.ident()?;
                 Ok(Expr::WithMember(n))
             }
@@ -1190,6 +1190,14 @@ End Sub"#,
         let m = module("Sub T()\r\n    Foo (1), 2\r\n    x = Bar(1)(2)\r\n    ws.Cells(1, 2).Value = \"a\"\r\nEnd Sub");
         assert!(matches!(&m.procs[0].body[0], Line::Stmt(Stmt::Call(Expr::Call(_, a)), _) if a.len() == 2));
         assert!(matches!(&m.procs[0].body[2], Line::Stmt(Stmt::Assign { target: Expr::Member(_, n), .. }, _) if n == "Value"));
+    }
+
+    #[test]
+    fn with_members_after_a_parenthesis() {
+        let m = module(
+            "Sub T()\r\n  With ActiveSheet\r\n    If (Len(.Range(\"D17\")) = 0) Or (Len(.Range(\"M9\")) = 0) Then x = 1\r\n    y = Left(.Cells(1, 2).Text, 3)\r\n  End With\r\nEnd Sub",
+        );
+        assert_eq!(m.procs.len(), 1);
     }
 
     #[test]

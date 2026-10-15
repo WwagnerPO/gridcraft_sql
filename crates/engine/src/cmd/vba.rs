@@ -16,6 +16,24 @@ pub fn specs() -> Vec<CommandSpec> {
             run
         ),
         cmd!(
+            query "vba.buttons",
+            "Buttons",
+            [],
+            None,
+            "{sheet?} → [{name, caption, macro, range}] the sheet's form-control buttons",
+            has_doc,
+            buttons
+        ),
+        cmd!(
+            noundo "vba.click",
+            "Click Button",
+            [],
+            None,
+            "{button: \"Button 1\", sheet?, answers?, inputs?} runs the button's macro (Application.Caller is the button) → {result, messages, output}",
+            has_doc,
+            click
+        ),
+        cmd!(
             query "vba.macros",
             "Macros",
             ["Developer", "Code"],
@@ -34,6 +52,53 @@ pub fn specs() -> Vec<CommandSpec> {
             modules
         ),
     ]
+}
+
+fn sheet_buttons(s: &Session, p: &Json) -> Result<(usize, Vec<gridcraft_xlsx::form_controls::FormButton>)> {
+    let si = target_sheet(s, p)?;
+    let d = s.doc()?;
+    let list = d.wb.sheet(si).and_then(|sh| sh.preserved.as_deref()).map(gridcraft_xlsx::form_controls::buttons).unwrap_or_default();
+    Ok((si, list))
+}
+
+fn buttons(s: &mut Session, p: &Json) -> Result<Json> {
+    let (_, list) = sheet_buttons(s, p)?;
+    Ok(Json::Array(
+        list.iter()
+            .map(|b| {
+                let [c0, _, r0, _, c1, _, r1, _] = b.anchor;
+                let range = gridcraft_core::RangeRef::new(gridcraft_core::CellRef::new(r0, c0), gridcraft_core::CellRef::new(r1, c1));
+                json!({"name": b.name, "caption": b.caption, "macro": b.macro_name, "range": range.a1()})
+            })
+            .collect(),
+    ))
+}
+
+fn ui_from(p: &Json) -> crate::vba_host::Headless {
+    let mut ui = crate::vba_host::Headless::default();
+    if let Some(a) = p.get("answers").and_then(Json::as_array) {
+        ui.answers = a.iter().filter_map(Json::as_i64).collect();
+    }
+    if let Some(a) = p.get("inputs").and_then(Json::as_array) {
+        ui.inputs = a.iter().map(|v| v.as_str().map(str::to_string)).collect();
+    }
+    ui
+}
+
+fn click(s: &mut Session, p: &Json) -> Result<Json> {
+    let name = str_param(p, "button").ok_or_else(|| bad("vba.click", "missing `button`"))?.to_string();
+    let (si, list) = sheet_buttons(s, p)?;
+    let b = list.iter().find(|b| b.name.eq_ignore_ascii_case(&name)).ok_or_else(|| bad("vba.click", format!("no button named `{name}`")))?;
+    if b.macro_name.is_empty() {
+        return Err(EngineError::Other(format!("No macro is assigned to {name}.")));
+    }
+    let macro_name = b.macro_name.clone();
+    let caller = b.name.clone();
+    // The button's sheet is active while its macro runs, as when it is clicked.
+    s.doc_mut()?.wb_switch_sheet(si);
+    let mut ui = ui_from(p);
+    let r = crate::vba_host::run_macro_from(s, &macro_name, &mut ui, None, Some(caller)).map_err(|e| EngineError::Other(e.to_string()))?;
+    Ok(json!({"result": r.to_str().unwrap_or_default(), "messages": ui.messages, "output": ui.output}))
 }
 
 fn macros(s: &mut Session, _: &Json) -> Result<Json> {

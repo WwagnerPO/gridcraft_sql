@@ -147,3 +147,56 @@ fn the_open_message_leaves_macros_to_the_security_bar() {
     h.run_steps(3);
     assert!(h.query_by_label("Macros enabled").is_some());
 }
+
+/// A sheet with a form button running `Mark`: click it on screen.
+fn button_harness() -> Harness {
+    let mut h = harness(&[("Module1", true, "Sub Mark()\r\n    Range(\"A1\").Value = Application.Caller\r\nEnd Sub\r\n")]);
+    let p = gridcraft_xlsx::form_controls::sample_preserved(&[(1025, "Button 1", "Run me", "Mark", [2, 0, 3, 0, 4, 0, 5, 0])]);
+    {
+        let s = &mut h.state_mut().session;
+        let wb = std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().wb);
+        wb.sheet_mut(0).unwrap().preserved = Some(std::sync::Arc::new(p));
+    }
+    h.run_steps(3);
+    h
+}
+
+fn click_button(h: &mut Harness) {
+    let app = h.state();
+    let sh = app.session.active().unwrap().wb.active().unwrap();
+    let geo = gridcraft_ui_egui::grid::Geo::new(sh, app.grid.rect.unwrap(), app.view().scroll);
+    // Inside the button (C4:E6), clear of its edges.
+    let pos = geo.cell_rect(sh, CellRef::parse("D5").unwrap()).center();
+    h.input_mut().events.push(egui::Event::PointerMoved(pos));
+    for pressed in [true, false] {
+        h.input_mut().events.push(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(1);
+    }
+}
+
+#[test]
+fn clicking_a_form_button_runs_its_macro() {
+    let mut h = button_harness();
+    // Macros disabled: the click explains instead of running.
+    click_button(&mut h);
+    h.run_steps(2);
+    assert!(h.state().message.as_ref().is_some_and(|m| m.1.contains("Enable Content")));
+    assert_eq!(cell(&h, "A1"), Value::Empty);
+    h.state_mut().message = None;
+    h.state_mut().open_dialog("enableMacros", json!({}));
+    h.run_steps(2);
+    click_button(&mut h);
+    for _ in 0..400 {
+        h.run_steps(1);
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        if h.state().ext.macro_run.is_none() && cell(&h, "A1") != Value::Empty {
+            break;
+        }
+    }
+    assert_eq!(cell(&h, "A1"), Value::text("Button 1"), "Application.Caller is the button");
+}

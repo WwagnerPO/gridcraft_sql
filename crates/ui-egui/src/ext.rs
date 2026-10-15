@@ -44,6 +44,16 @@ pub fn ui_action(app: &mut SheetApp, name: &str) -> bool {
     true
 }
 
+/// Form-control buttons over the sheet's cells.
+pub fn paint_controls(app: &SheetApp, painter: &egui::Painter, geo: &crate::grid::Geo, sh: &gridcraft_engine::model::Sheet) {
+    crate::controls::paint(app, painter, geo, sh);
+}
+
+/// A click on the sheet: true when a button took it.
+pub fn click_control(app: &mut SheetApp, geo: &crate::grid::Geo, sh: &gridcraft_engine::model::Sheet, p: egui::Pos2) -> bool {
+    crate::controls::click(app, geo, sh, p)
+}
+
 /// After a workbook opened from a file.
 pub fn after_open(app: &mut SheetApp) {
     get_data::refresh_on_open(app);

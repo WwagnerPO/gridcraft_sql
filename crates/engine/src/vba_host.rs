@@ -17,6 +17,13 @@ use serde_json::{Value as Json, json};
 
 use crate::Session;
 
+pub use gridcraft_xlsx::form_controls::FormButton;
+
+/// The form-control buttons of a sheet (Developer › Insert › Button).
+pub fn sheet_buttons(sh: &gridcraft_model::Sheet) -> Vec<FormButton> {
+    sh.preserved.as_deref().map(gridcraft_xlsx::form_controls::buttons).unwrap_or_default()
+}
+
 /// What a macro shows the person running it.
 pub trait MacroUi {
     /// A message box; returns the button pressed (`vbOK` = 1, `vbYes` = 6…).
@@ -302,12 +309,16 @@ pub struct ExcelHost<'a> {
     app: HashMap<String, V>,
     /// Sheets renamed during the macro: old name (lower) → new name.
     renamed: Vec<(String, String)>,
+    /// `Application.Caller`: the button that started the macro.
+    pub caller: Option<String>,
+    streams: Vec<(u32, objects::Stream)>,
+    next_stream: u32,
 }
 
 impl<'a> ExcelHost<'a> {
     pub fn new(s: &'a mut Session, ui: &'a mut dyn MacroUi) -> ExcelHost<'a> {
         let this_uid = s.active().map(|d| d.uid).unwrap_or(0);
-        ExcelHost { s, ui, this_uid, app: HashMap::new(), renamed: vec![] }
+        ExcelHost { s, ui, this_uid, app: HashMap::new(), renamed: vec![], caller: None, streams: vec![], next_stream: 0 }
     }
 
     // ------------------------------------------------------------ documents and sheets
@@ -815,7 +826,7 @@ impl<'a> ExcelHost<'a> {
                 let si = self.sheet_index(r.uid, &r.sheet)?;
                 Ok(V::Double(wb.sheet(si).map(|s| gridcraft_model::points_to_chars(s.col_width(a.start.col) as f64)).unwrap_or(8.43)))
             }
-            "rowheight" | "height" => {
+            "rowheight" => {
                 let wb = self.wb(r.uid)?;
                 let si = self.sheet_index(r.uid, &r.sheet)?;
                 Ok(V::Double(wb.sheet(si).map(|s| s.row_height(a.start.row) as f64).unwrap_or(15.0)))
@@ -910,6 +921,23 @@ impl<'a> ExcelHost<'a> {
             }
             "calculate" => Ok(V::Empty),
             "show" => Ok(V::Empty),
+            "addcommentthreaded" | "addcomment" => {
+                let text = arg(args, 0).map(|v| v.to_str()).transpose()?.unwrap_or_default();
+                self.add_comment(r, &text, m == "addcommentthreaded")
+            }
+            "commentthreaded" => self.range_comment(r, true),
+            "comment" => self.range_comment(r, false),
+            "left" | "top" | "width" | "height" => {
+                let wb = self.wb(r.uid)?;
+                let si = self.sheet_index(r.uid, &r.sheet)?;
+                let sh = wb.sheet(si).ok_or_else(|| err(9, "sheet"))?;
+                Ok(V::Double(match m.as_str() {
+                    "left" => sh.col_left(a.start.col),
+                    "top" => sh.row_top(a.start.row),
+                    "width" => sh.col_left(a.end.col.saturating_add(1)) - sh.col_left(a.start.col),
+                    _ => sh.row_top(a.end.row.saturating_add(1)) - sh.row_top(a.start.row),
+                }))
+            }
             _ => Err(err(438, format!("Object doesn't support this property or method: Range.{member}"))),
         }
     }
@@ -1206,6 +1234,9 @@ impl<'a> ExcelHost<'a> {
                 }))
             }
             "parent" => Ok(host("Workbook", uid.to_string())),
+            "shapes" | "buttons" if args.is_empty() => Ok(host("Shapes", format!("{uid}{SEP}{name}"))),
+            "shapes" | "buttons" => self.shapes_get(&format!("{uid}{SEP}{name}"), "Item", args),
+            "oleobjects" if args.is_empty() => Ok(host("OLEObjects", format!("{uid}{SEP}{name}"))),
             "calculate" => Ok(V::Empty),
             "protect" => self
                 .run(
@@ -1337,6 +1368,7 @@ impl<'a> ExcelHost<'a> {
                 Ok(V::Bool(!d.is_dirty()))
             }
             "close" | "activate" => Ok(V::Empty),
+            "refreshall" => self.run(uid, "data.refreshAll", json!({})).map(|_| V::Empty),
             _ => Err(err(438, format!("Object doesn't support this property or method: Workbook.{member}"))),
         }
     }
@@ -1447,6 +1479,10 @@ impl<'a> ExcelHost<'a> {
                 Ok(acc.map(|r| range_value(&r)).unwrap_or(V::Nothing))
             }
             "getopenfilename" | "getsaveasfilename" => Ok(V::Bool(false)),
+            "caller" => Ok(self.caller.clone().map(V::str).unwrap_or(V::Error(2023))),
+            "pathseparator" => Ok(V::str(std::path::MAIN_SEPARATOR.to_string())),
+            "dialogs" => Err(err(1004, "Built-in Excel dialogs (Application.Dialogs) aren't available in GridCraft")),
+            "filedialog" => Err(err(1004, "Application.FileDialog isn't available in GridCraft yet")),
             _ => self
                 .global(member)
                 .and_then(|g| g.ok_or_else(|| err(438, format!("Object doesn't support this property or method: Application.{member}"))))
@@ -1659,7 +1695,23 @@ impl Host for ExcelHost<'_> {
         }))
     }
 
+    fn create_object(&mut self, class: &str) -> Result<Option<V>, VbaError> {
+        Ok(match class.to_ascii_lowercase().as_str() {
+            "adodb.stream" => Some(self.new_stream()),
+            _ => None,
+        })
+    }
+
     fn call_global(&mut self, name: &str, args: &[V]) -> Result<Option<V>, VbaError> {
+        let text = |i: usize| arg(args, i).map(|v| v.to_str()).transpose().map(Option::unwrap_or_default);
+        match name.to_ascii_lowercase().as_str() {
+            "dir" | "dir$" => return objects::dir(&text(0)?).map(Some),
+            "kill" => return objects::kill(&text(0)?).map(|_| Some(V::Empty)),
+            "filecopy" | "mkdir" | "rmdir" => return objects::file_op(&name.to_ascii_lowercase(), &text(0)?, &text(1)?).map(|_| Some(V::Empty)),
+            "environ" | "environ$" => return Ok(Some(V::str(std::env::var(text(0)?).unwrap_or_default()))),
+            "curdir" | "curdir$" => return Ok(Some(V::str(std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default()))),
+            _ => {}
+        }
         match name.to_ascii_lowercase().as_str() {
             "evaluate" => Ok(Some(self.evaluate(&arg(args, 0).ok_or_else(|| err(450, "Evaluate"))?.to_str()?)?)),
             "intersect" | "union" => self.application_get(name, args).map(Some),
@@ -1723,6 +1775,16 @@ impl Host for ExcelHost<'_> {
                 _ => Err(err(438, format!("Object doesn't support this property or method: Workbooks.{member}"))),
             },
             "WorksheetFunction" => self.worksheet_function(member, args),
+            "Shapes" => self.shapes_get(&obj.id, member, args),
+            "Shape" => self.shape_get(&obj.id, member),
+            "TextFrame" => self.text_frame_get(&obj.id, member),
+            "Characters" => self.characters_get(&obj.id, member),
+            "CommentThreaded" | "Comment" => self.comment_get(&obj.id, member, args),
+            "Stream" => self.stream_call(&obj.id, member, args),
+            "OLEObjects" => match member.to_ascii_lowercase().as_str() {
+                "count" => Ok(V::Long(0)),
+                _ => Err(err(1004, "Embedding objects (OLEObjects.Add) isn't available in GridCraft")),
+            },
             "Application" => self.application_get(member, args),
             _ => Err(err(438, format!("Object doesn't support this property or method: {member}"))),
         }
@@ -1771,6 +1833,9 @@ impl Host for ExcelHost<'_> {
                 Ok(())
             }
             "Workbook" if member.eq_ignore_ascii_case("Saved") => Ok(()),
+            "Shape" => self.shape_set(&obj.id, member, value),
+            "Characters" | "TextFrame" => self.shape_set(&obj.id, member, value),
+            "Stream" => self.stream_set(&obj.id, member, value),
             _ => Err(err(438, format!("Can't set {member}"))),
         }
     }
@@ -1787,6 +1852,8 @@ impl Host for ExcelHost<'_> {
                 Ok(names.iter().map(|n| self.sheet_handle(uid, n)).collect())
             }
             "Workbooks" => Ok(self.s.documents().iter().map(|d| host("Workbook", d.uid.to_string())).collect()),
+            "Shapes" => self.shapes_enumerate(&obj.id),
+            "OLEObjects" => Ok(vec![]),
             _ => Err(err(438, "Object doesn't support this property or method")),
         }
     }
@@ -1833,6 +1900,17 @@ pub fn run_macro_with(
     ui: &mut dyn MacroUi,
     cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 ) -> Result<V, VbaError> {
+    run_macro_from(s, name, ui, cancel, None)
+}
+
+/// [`run_macro_with`] started by a button: `caller` is what `Application.Caller` returns.
+pub fn run_macro_from(
+    s: &mut Session,
+    name: &str,
+    ui: &mut dyn MacroUi,
+    cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    caller: Option<String>,
+) -> Result<V, VbaError> {
     let proj = crate::cmd::vba::project(s).map_err(engine_err)?.ok_or_else(|| err(35, "This workbook has no macros"))?;
     let sources: Vec<(String, String)> = proj.modules.iter().map(|m| (m.name.clone(), m.source.clone())).collect();
     let program = gridcraft_vba::Program::parse(&sources)?;
@@ -1841,6 +1919,7 @@ pub fn run_macro_with(
     let journal_before = s.journal.len();
     let result = {
         let mut host = ExcelHost::new(s, ui);
+        host.caller = caller;
         let mut interp = gridcraft_vba::Interp::new(program, &mut host);
         if let Some(c) = cancel {
             interp.set_cancel(c);
@@ -1869,6 +1948,8 @@ pub fn run_macro_with(
         other => other,
     }
 }
+
+mod objects;
 
 #[cfg(test)]
 mod tests;

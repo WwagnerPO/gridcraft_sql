@@ -74,6 +74,11 @@ pub struct MacroRun {
 
 /// Starts macro `name` of the active workbook.
 pub fn start(app: &mut SheetApp, name: &str) {
+    start_from(app, name, None);
+}
+
+/// Starts macro `name`, run by the button `caller` (`Application.Caller`) when given.
+pub fn start_from(app: &mut SheetApp, name: &str, caller: Option<String>) {
     if app.ext.macro_run.is_some() {
         return;
     }
@@ -83,7 +88,7 @@ pub fn start(app: &mut SheetApp, name: &str) {
     #[cfg(target_arch = "wasm32")]
     {
         let mut ui = gridcraft_engine::vba_host::Headless::default();
-        let r = gridcraft_engine::vba_host::run_macro(&mut app.session, name, &mut ui);
+        let r = gridcraft_engine::vba_host::run_macro_from(&mut app.session, name, &mut ui, None, caller);
         finish(app, name, r.map(|v| v.to_str().unwrap_or_default()).map_err(|e| e.to_string()), ui.output);
     }
     #[cfg(not(target_arch = "wasm32"))]
@@ -95,7 +100,7 @@ pub fn start(app: &mut SheetApp, name: &str) {
         let macro_name = name.to_string();
         let spawned = std::thread::Builder::new().name("gridcraft-macro".into()).spawn(move || {
             let mut ui = ChannelUi { tx };
-            let r = gridcraft_engine::vba_host::run_macro_with(&mut session, &macro_name, &mut ui, Some(stop));
+            let r = gridcraft_engine::vba_host::run_macro_from(&mut session, &macro_name, &mut ui, Some(stop), caller);
             (session, r.map(|v| v.to_str().unwrap_or_default()).map_err(|e| e.to_string()))
         });
         match spawned {
