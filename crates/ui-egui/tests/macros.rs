@@ -14,7 +14,7 @@ fn harness(modules: &[(&str, bool, &str)]) -> Harness {
     let mut session = Session::new();
     session.new_workbook();
     let bin = gridcraft_xlsx::ovba::tests_support::sample_project(modules);
-    std::sync::Arc::make_mut(&mut session.doc_mut().unwrap().wb).vba_project = Some(bin);
+    std::sync::Arc::make_mut(&mut session.doc_mut().unwrap().wb).vba_project = Some(std::sync::Arc::new(bin));
     let b = egui_kittest::Harness::builder().with_step_dt(1.0 / 60.0).with_size(vec2(1000.0, 600.0));
     let b = if std::env::var_os("GRIDCRAFT_SNAPSHOT_DIR").is_some() { b.wgpu() } else { b };
     let mut h = b.build_ui_state(

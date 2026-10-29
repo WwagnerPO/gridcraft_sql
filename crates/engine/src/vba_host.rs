@@ -396,7 +396,7 @@ impl<'a> ExcelHost<'a> {
                 continue;
             }
             // A defined name.
-            let si = wb.sheet_index(&sheet).unwrap_or(wb.active_sheet);
+            let si = wb.sheet_index(&sheet).unwrap_or(wb.active_sheet());
             if let Some(n) = wb.name(&body, si) {
                 let (nsh, nbody) = crate::cmd::split_sheet(n.formula.trim_start_matches('='));
                 if let Some(nsh) = nsh {
@@ -1399,7 +1399,7 @@ impl<'a> ExcelHost<'a> {
             });
         }
         let formula = format!("={name}({})", parts.join(","));
-        let v = gridcraft_calc::evaluate(wb, wb.active_sheet, CellRef::new(0, 0), &formula);
+        let v = gridcraft_calc::evaluate(wb, wb.active_sheet(), CellRef::new(0, 0), &formula);
         core_to_vba(v)
     }
 
@@ -1407,7 +1407,7 @@ impl<'a> ExcelHost<'a> {
         let uid = self.active_uid();
         let wb = self.wb(uid)?;
         let f = if text.starts_with('=') { text.to_string() } else { format!("={text}") };
-        let v = gridcraft_calc::evaluate(wb, wb.active_sheet, CellRef::new(0, 0), &f);
+        let v = gridcraft_calc::evaluate(wb, wb.active_sheet(), CellRef::new(0, 0), &f);
         core_to_vba(v)
     }
 

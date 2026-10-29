@@ -1,7 +1,7 @@
 //! Reading any stream of a compound file by path (`["VBA", "dir"]`), not only root streams: the
 //! VBA project (MS-OVBA) keeps its modules in a storage.
 
-use super::*;
+use super::{Compound, DirEntry, MAX_STREAM, NO_STREAM, STREAM_OBJECT};
 
 impl Compound<'_> {
     /// The entry called `name` (case-insensitive, stream or storage) among the children of

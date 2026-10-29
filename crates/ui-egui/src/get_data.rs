@@ -336,7 +336,7 @@ fn navigator(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut bool) {
             let current = s(d, "database");
             if !databases.is_empty() || !current.is_empty() {
                 ui.label(tr(app, "Database"));
-                egui::ComboBox::from_id_salt("sql_db")
+                craft_ui::ComboBox::from_id_salt("sql_db")
                     .width(230.0)
                     .selected_text(if current.is_empty() { "—".to_string() } else { current.clone() })
                     .show_ui(ui, |ui| {
@@ -768,7 +768,7 @@ fn target_picker(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog) -> Json {
     ui.label(tr(app, "Database"));
     let shown =
         conns.iter().find(|c| c.0 == pick).map(|c| format!("{} · {} ({})", c.1, c.2, c.0)).unwrap_or_else(|| tr(app, "Another server…").to_string());
-    egui::ComboBox::from_id_salt("db_target").width(380.0).selected_text(shown).show_ui(ui, |ui| {
+    craft_ui::ComboBox::from_id_salt("db_target").width(380.0).selected_text(shown).show_ui(ui, |ui| {
         for c in &conns {
             if ui.selectable_label(pick == c.0, format!("{} · {} ({})", c.1, c.2, c.0)).clicked() {
                 pick = c.0.clone();

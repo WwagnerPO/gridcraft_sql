@@ -2,7 +2,7 @@
 
 use serde_json::{Value as Json, json};
 
-use super::*;
+use super::{CommandSpec, EngineError, Result, Session, bad, bool_param, cmd, has_doc, str_param, target_sheet};
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -168,7 +168,7 @@ mod tests {
         assert_eq!(s.execute("vba.modules", json!({})).unwrap(), json!([]));
         let bin =
             gridcraft_xlsx::ovba::tests_support::sample_project(&[("Module1", true, "Attribute VB_Name = \"Module1\"\r\nSub A()\r\nEnd Sub\r\n")]);
-        Arc_mut(&mut s).vba_project = Some(bin);
+        Arc_mut(&mut s).vba_project = Some(std::sync::Arc::new(bin));
         let r = s.execute("vba.modules", json!({"source": true})).unwrap();
         assert_eq!(r[0]["name"], "Module1");
         assert_eq!(r[0]["kind"], "standard");

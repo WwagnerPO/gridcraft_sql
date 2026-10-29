@@ -95,7 +95,7 @@ pub enum Stmt {
     Const(Vec<(String, TypeRef, Expr)>),
     ReDim {
         preserve: bool,
-        items: Vec<(Expr, Vec<(Option<Expr>, Expr)>, TypeRef)>,
+        items: Vec<ReDimItem>,
     },
     /// `x = 1`, `Range("A1").Value = 1`, `Mid(s, 2, 1) = "x"`.
     Assign {
@@ -205,8 +205,14 @@ pub struct Module {
     pub vars: Vec<(VarDecl, bool)>,
     pub consts: Vec<(String, TypeRef, Expr, bool)>,
     pub types: Vec<(String, Vec<VarDecl>)>,
-    pub enums: Vec<(String, Vec<(String, Option<Expr>)>)>,
+    pub enums: Vec<EnumDef>,
     pub procs: Vec<Procedure>,
     /// `Declare` statements (Windows API calls): kept by name to report them.
     pub declares: Vec<String>,
 }
+
+/// One array of a `ReDim`: the variable, its bounds (`lower To upper`, lower optional) and type.
+pub type ReDimItem = (Expr, Vec<(Option<Expr>, Expr)>, TypeRef);
+
+/// An `Enum` block: its name and members, each with an optional value.
+pub type EnumDef = (String, Vec<(String, Option<Expr>)>);

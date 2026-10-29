@@ -336,7 +336,7 @@ pub fn read_project(bin: &[u8]) -> Result<VbaProject, String> {
 /// Builders for tests (other crates' too).
 #[cfg(any(test, feature = "test-support"))]
 pub mod tests_support {
-    use super::*;
+    use super::{compress, encode};
 
     fn rec(id: u16, data: &[u8]) -> Vec<u8> {
         let mut v = id.to_le_bytes().to_vec();

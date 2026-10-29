@@ -1,6 +1,6 @@
 //! Parsing VBA modules ([MS-VBAL] 5): declarations, procedures, statements and expressions.
 
-use crate::ast::*;
+use crate::ast::{Arg, CaseTest, ExitKind, Expr, Line, Module, OnError, Param, ProcKind, Procedure, ResumeKind, Stmt, TypeRef, UnOp, VarDecl};
 use crate::error::{VbaError, syntax};
 use crate::lexer::{Tok, Token, tokenize};
 use crate::value::BinOp;

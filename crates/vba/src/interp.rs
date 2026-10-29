@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::*;
+use crate::ast::{Arg, CaseTest, ExitKind, Expr, Line, Module, OnError, Param, ProcKind, Procedure, ResumeKind, Stmt, UnOp, VarDecl};
 use crate::builtins::{self, Collection, Dictionary};
 use crate::error::{VbaError, err};
 use crate::value::{self, BinOp, HostRef, Obj, Udt, Value};
@@ -513,7 +513,7 @@ impl<'h> Interp<'h> {
                 }
                 Ok(Flow::Normal)
             }
-            Stmt::For { var, from, to, step, body } => self.exec_for(var, from, to, step.as_ref(), body, scope, ctx),
+            Stmt::For { var, from, to, step, body } => self.exec_for(ForHead { var, from, to, step: step.as_ref() }, body, scope, ctx),
             Stmt::ForEach { var, collection, body } => self.exec_for_each(var, collection, body, scope, ctx),
             Stmt::Do { pre, post, body } => self.exec_do(pre.as_ref(), post.as_ref(), body, scope, ctx),
             Stmt::With { object, body } => {
@@ -592,16 +592,8 @@ impl<'h> Interp<'h> {
         })
     }
 
-    fn exec_for(
-        &mut self,
-        var: &Expr,
-        from: &Expr,
-        to: &Expr,
-        step: Option<&Expr>,
-        body: &[Line],
-        scope: &mut Scope,
-        ctx: &mut ProcCtx,
-    ) -> Result<Flow, VbaError> {
+    fn exec_for(&mut self, head: ForHead<'_>, body: &[Line], scope: &mut Scope, ctx: &mut ProcCtx) -> Result<Flow, VbaError> {
+        let ForHead { var, from, to, step } = head;
         let start = self.eval_value(from, scope)?.to_f64()?;
         let end = self.eval_value(to, scope)?.to_f64()?;
         let step_v = match step {
@@ -1510,6 +1502,14 @@ fn copy_overlap(old: &value::Array, new: &mut value::Array) {
             idx[d] = old.bounds[d].0;
         }
     }
+}
+
+/// The head of a `For var = from To to [Step step]` loop.
+struct ForHead<'a> {
+    var: &'a Expr,
+    from: &'a Expr,
+    to: &'a Expr,
+    step: Option<&'a Expr>,
 }
 
 #[cfg(test)]

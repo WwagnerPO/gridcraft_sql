@@ -1,6 +1,9 @@
 //! The database icons (Get Data, Refresh All), drawn like the rest of the set.
 
-use super::*;
+use super::{Color32, CubicBezierShape, G, Icon, Stroke};
+
+const GREEN: Color32 = Color32::from_rgb(0x10, 0x7C, 0x41);
+const BLUE: Color32 = Color32::from_rgb(0x2B, 0x7C, 0xD3);
 
 pub(super) fn paint(g: &G<'_>, icon: Icon) {
     match icon {

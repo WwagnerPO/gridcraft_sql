@@ -6,7 +6,7 @@ fn session(code: &str) -> Session {
     let mut s = Session::new();
     s.execute("file.new", json!({})).unwrap();
     let bin = gridcraft_xlsx::ovba::tests_support::sample_project(&[("Module1", true, code)]);
-    std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().wb).vba_project = Some(bin);
+    std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().wb).vba_project = Some(std::sync::Arc::new(bin));
     s
 }
 

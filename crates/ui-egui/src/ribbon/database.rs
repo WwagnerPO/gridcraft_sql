@@ -1,7 +1,8 @@
 //! The Data tab's database groups: Get Data (files and SQL Server), Queries & Connections and
 //! Database (write back). `ribbon.rs` draws them with one call.
 
-use super::*;
+use super::controls::{control_keytip, menu_items, sep};
+use super::{Icon, SheetApp, Ui, big_button, json, small_button};
 
 /// Get Data, Queries & Connections and Database, in place of the Text/CSV-only Get Data button.
 pub(super) fn data_groups(app: &mut SheetApp, ui: &mut Ui) {

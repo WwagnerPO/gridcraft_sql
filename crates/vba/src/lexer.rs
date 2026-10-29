@@ -43,9 +43,8 @@ pub struct Token {
 
 const OPS: [&str; 20] = [":=", "<=", ">=", "<>", "=<", "=>", "+", "-", "*", "/", "\\", "^", "&", "=", "<", ">", ".", "!", "(", ")"];
 
-pub fn tokenize(module: &str, src: &str) -> Result<Vec<Token>, VbaError> {
-    let mut out: Vec<Token> = vec![];
-    // Join continued lines, remembering each logical line's first physical line.
+/// Joins continued lines (` _`), remembering each logical line's first physical line.
+fn logical_lines(src: &str) -> Vec<(usize, String)> {
     let mut logical: Vec<(usize, String)> = vec![];
     let mut pending: Option<(usize, String)> = None;
     for (i, raw) in src.lines().enumerate() {
@@ -66,7 +65,108 @@ pub fn tokenize(module: &str, src: &str) -> Result<Vec<Token>, VbaError> {
     if let Some(p) = pending.take() {
         logical.push(p);
     }
-    for (line_no, text) in logical {
+    logical
+}
+
+/// Reads a string literal whose opening quote is at `start`: its text (`""` is a quote) and the
+/// position after the closing quote.
+fn string_literal(chars: &[char], start: usize, module: &str, line_no: usize) -> Result<(String, usize), VbaError> {
+    let mut s = String::new();
+    let mut i = start + 1;
+    loop {
+        match chars.get(i) {
+            Some('"') if chars.get(i + 1) == Some(&'"') => {
+                s.push('"');
+                i += 2;
+            }
+            Some('"') => return Ok((s, i + 1)),
+            Some(&x) => {
+                s.push(x);
+                i += 1;
+            }
+            None => return Err(syntax(module, line_no, "Expected: \"")),
+        }
+    }
+}
+
+/// Reads a `&H…`/`&O…` literal starting at `i` (an optional `&` suffix makes it a Long).
+fn radix_literal(chars: &[char], i: usize, module: &str, line_no: usize) -> Result<(Tok, usize), VbaError> {
+    let radix = if matches!(chars[i + 1], 'h' | 'H') { 16 } else { 8 };
+    let mut j = i + 2;
+    while chars.get(j).is_some_and(|x| x.is_digit(radix)) {
+        j += 1;
+    }
+    let digits: String = chars[i + 2..j].iter().collect();
+    let n = u64::from_str_radix(&digits, radix).map_err(|_| syntax(module, line_no, "Overflow"))?;
+    let (n, kind) = match chars.get(j) {
+        Some('&') => {
+            j += 1;
+            ((n as u32) as i32 as i64, NumKind::Long)
+        }
+        _ if n <= 0xFFFF => ((n as u16) as i16 as i64, NumKind::Integer),
+        _ => ((n as u32) as i32 as i64, NumKind::Long),
+    };
+    Ok((Tok::Int(n, kind), j))
+}
+
+/// Reads a decimal number starting at `i`, with its exponent and type suffix.
+fn number_literal(chars: &[char], i: usize, module: &str, line_no: usize) -> Result<(Tok, usize), VbaError> {
+    let mut j = i;
+    while chars.get(j).is_some_and(|x| x.is_ascii_digit()) {
+        j += 1;
+    }
+    let mut float = false;
+    if chars.get(j) == Some(&'.') && chars.get(j + 1).is_some_and(|x| x.is_ascii_digit()) {
+        float = true;
+        j += 1;
+        while chars.get(j).is_some_and(|x| x.is_ascii_digit()) {
+            j += 1;
+        }
+    } else if chars.get(j) == Some(&'.') && !chars.get(j + 1).is_some_and(|x| x.is_alphabetic()) {
+        float = true;
+        j += 1;
+    }
+    if matches!(chars.get(j), Some('e' | 'E' | 'd' | 'D'))
+        && (chars.get(j + 1).is_some_and(|x| x.is_ascii_digit())
+            || (matches!(chars.get(j + 1), Some('+' | '-')) && chars.get(j + 2).is_some_and(|x| x.is_ascii_digit())))
+    {
+        float = true;
+        j += 2;
+        while chars.get(j).is_some_and(|x| x.is_ascii_digit()) {
+            j += 1;
+        }
+    }
+    let text: String = chars[i..j].iter().map(|&x| if x == 'd' || x == 'D' { 'e' } else { x }).collect();
+    let suffix = match chars.get(j) {
+        Some(&s @ ('%' | '&' | '!' | '#' | '@' | '^')) => {
+            j += 1;
+            Some(s)
+        }
+        _ => None,
+    };
+    let tok = match (float, suffix) {
+        (_, Some('!')) => Tok::Float(text.parse().unwrap_or(0.0), NumKind::Single),
+        (_, Some('#')) => Tok::Float(text.parse().unwrap_or(0.0), NumKind::Double),
+        (_, Some('@')) => Tok::Float(text.parse().unwrap_or(0.0), NumKind::Currency),
+        (true, _) => Tok::Float(text.parse().map_err(|_| syntax(module, line_no, "Invalid number"))?, NumKind::Double),
+        (false, s) => {
+            let n: f64 = text.parse().map_err(|_| syntax(module, line_no, "Invalid number"))?;
+            match s {
+                Some('%') => Tok::Int(n as i64, NumKind::Integer),
+                Some('&') => Tok::Int(n as i64, NumKind::Long),
+                Some('^') => Tok::Int(n as i64, NumKind::LongLong),
+                _ if n <= 32_767.0 => Tok::Int(n as i64, NumKind::Integer),
+                _ if n <= 2_147_483_647.0 => Tok::Int(n as i64, NumKind::Long),
+                _ => Tok::Float(n, NumKind::Double),
+            }
+        }
+    };
+    Ok((tok, j))
+}
+
+pub fn tokenize(module: &str, src: &str) -> Result<Vec<Token>, VbaError> {
+    let mut out: Vec<Token> = vec![];
+    for (line_no, text) in logical_lines(src) {
         let trimmed = text.trim_start();
         if trimmed.len() >= 10 && trimmed.get(..10).is_some_and(|t| t.eq_ignore_ascii_case("attribute ")) {
             continue;
@@ -96,25 +196,8 @@ pub fn tokenize(module: &str, src: &str) -> Result<Vec<Token>, VbaError> {
             }
             statement_start = false;
             if c == '"' {
-                let mut s = String::new();
-                i += 1;
-                loop {
-                    match chars.get(i) {
-                        Some('"') if chars.get(i + 1) == Some(&'"') => {
-                            s.push('"');
-                            i += 2;
-                        }
-                        Some('"') => {
-                            i += 1;
-                            break;
-                        }
-                        Some(&x) => {
-                            s.push(x);
-                            i += 1;
-                        }
-                        None => return Err(syntax(module, line_no, "Expected: \"")),
-                    }
-                }
+                let (s, next) = string_literal(&chars, i, module, line_no)?;
+                i = next;
                 push(&mut out, Tok::Str(s), spaced);
                 spaced = false;
                 continue;
@@ -144,79 +227,16 @@ pub fn tokenize(module: &str, src: &str) -> Result<Vec<Token>, VbaError> {
                 continue;
             }
             if c == '&' && matches!(chars.get(i + 1), Some('h' | 'H' | 'o' | 'O')) && chars.get(i + 2).is_some_and(|x| x.is_ascii_hexdigit()) {
-                let radix = if matches!(chars[i + 1], 'h' | 'H') { 16 } else { 8 };
-                let mut j = i + 2;
-                while chars.get(j).is_some_and(|x| x.is_digit(radix)) {
-                    j += 1;
-                }
-                let digits: String = chars[i + 2..j].iter().collect();
-                let n = u64::from_str_radix(&digits, radix).map_err(|_| syntax(module, line_no, "Overflow"))?;
-                let (n, kind) = match chars.get(j) {
-                    Some('&') => {
-                        j += 1;
-                        ((n as u32) as i32 as i64, NumKind::Long)
-                    }
-                    _ if n <= 0xFFFF => ((n as u16) as i16 as i64, NumKind::Integer),
-                    _ => ((n as u32) as i32 as i64, NumKind::Long),
-                };
-                push(&mut out, Tok::Int(n, kind), spaced);
-                i = j;
+                let (tok, next) = radix_literal(&chars, i, module, line_no)?;
+                push(&mut out, tok, spaced);
+                i = next;
                 spaced = false;
                 continue;
             }
             if c.is_ascii_digit() || (c == '.' && chars.get(i + 1).is_some_and(|x| x.is_ascii_digit()) && spaced) {
-                let mut j = i;
-                while chars.get(j).is_some_and(|x| x.is_ascii_digit()) {
-                    j += 1;
-                }
-                let mut float = false;
-                if chars.get(j) == Some(&'.') && chars.get(j + 1).is_some_and(|x| x.is_ascii_digit()) {
-                    float = true;
-                    j += 1;
-                    while chars.get(j).is_some_and(|x| x.is_ascii_digit()) {
-                        j += 1;
-                    }
-                } else if chars.get(j) == Some(&'.') && !chars.get(j + 1).is_some_and(|x| x.is_alphabetic()) {
-                    float = true;
-                    j += 1;
-                }
-                if matches!(chars.get(j), Some('e' | 'E' | 'd' | 'D'))
-                    && (chars.get(j + 1).is_some_and(|x| x.is_ascii_digit())
-                        || (matches!(chars.get(j + 1), Some('+' | '-')) && chars.get(j + 2).is_some_and(|x| x.is_ascii_digit())))
-                {
-                    float = true;
-                    j += 2;
-                    while chars.get(j).is_some_and(|x| x.is_ascii_digit()) {
-                        j += 1;
-                    }
-                }
-                let text: String = chars[i..j].iter().map(|&x| if x == 'd' || x == 'D' { 'e' } else { x }).collect();
-                let suffix = match chars.get(j) {
-                    Some(&s @ ('%' | '&' | '!' | '#' | '@' | '^')) => {
-                        j += 1;
-                        Some(s)
-                    }
-                    _ => None,
-                };
-                let tok = match (float, suffix) {
-                    (_, Some('!')) => Tok::Float(text.parse().unwrap_or(0.0), NumKind::Single),
-                    (_, Some('#')) => Tok::Float(text.parse().unwrap_or(0.0), NumKind::Double),
-                    (_, Some('@')) => Tok::Float(text.parse().unwrap_or(0.0), NumKind::Currency),
-                    (true, _) => Tok::Float(text.parse().map_err(|_| syntax(module, line_no, "Invalid number"))?, NumKind::Double),
-                    (false, s) => {
-                        let n: f64 = text.parse().map_err(|_| syntax(module, line_no, "Invalid number"))?;
-                        match s {
-                            Some('%') => Tok::Int(n as i64, NumKind::Integer),
-                            Some('&') => Tok::Int(n as i64, NumKind::Long),
-                            Some('^') => Tok::Int(n as i64, NumKind::LongLong),
-                            _ if n <= 32_767.0 => Tok::Int(n as i64, NumKind::Integer),
-                            _ if n <= 2_147_483_647.0 => Tok::Int(n as i64, NumKind::Long),
-                            _ => Tok::Float(n, NumKind::Double),
-                        }
-                    }
-                };
+                let (tok, next) = number_literal(&chars, i, module, line_no)?;
                 push(&mut out, tok, spaced);
-                i = j;
+                i = next;
                 spaced = false;
                 continue;
             }

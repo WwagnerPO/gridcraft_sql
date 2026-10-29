@@ -8,10 +8,10 @@
 use std::sync::Arc;
 
 use gridcraft_core::{CellRef, RangeRef, Value};
-use gridcraft_model::*;
+use gridcraft_model::{Cell, Connection, DataSource, NumFmt, QueryCommand, Sheet, SqlAuth, StyleId, Table, TableColumn, TotalsFn, Workbook};
 use serde_json::{Value as Json, json};
 
-use super::*;
+use super::{CommandSpec, Ctx, EngineError, Result, Session, always, bad, bool_param, cmd, edit, f64_param, has_doc, ok, str_param};
 use crate::datasource::{self, Credential, DbValue, QueryResult};
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -380,7 +380,7 @@ fn load_new(s: &mut Session, source: &DataSource, user: &str, command: QueryComm
     let now = gridcraft_calc::now_serial();
     let rows = r.rows.len();
     let (si, range) = edit(s, |cx| {
-        let at = (cx.wb.active_sheet + 1).min(cx.wb.sheets.len());
+        let at = (cx.wb.active_sheet() + 1).min(cx.wb.sheets.len());
         cx.wb.sheets.insert(at, Arc::new(Sheet::new(sheet.clone())));
         for n in cx.wb.names.iter_mut() {
             if let Some(sc) = n.scope.as_mut()
@@ -389,7 +389,7 @@ fn load_new(s: &mut Session, source: &DataSource, user: &str, command: QueryComm
                 *sc += 1;
             }
         }
-        cx.wb.active_sheet = at;
+        cx.wb.set_active_sheet(at);
         let range = write_rows(cx, at, CellRef::new(0, 0), &headers, r)?;
         cx.sheet_mut(at)?.tables.push(new_table(table_id, &table, range, &headers));
         cx.wb.connections.push(Connection {
@@ -931,7 +931,7 @@ mod tests {
         // And it refreshes after reopening, once signed in.
         let mut s2 = Session::new();
         s2.set_data_provider(fake.clone());
-        s2.add_document(crate::DocState::new(wb2, None, "Book".into()));
+        s2.add_document(crate::DocState::new(wb2, None, "Book".into(), crate::Trust::FromFile));
         s2.set_credential("db.local", Credential { user: "sa".into(), password: "secret".into() });
         let r = s2.execute("data.refreshAll", json!({})).unwrap();
         assert_eq!(r["refreshed"], 1, "{r}");

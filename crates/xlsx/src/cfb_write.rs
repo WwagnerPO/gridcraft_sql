@@ -49,9 +49,8 @@ fn tree(sorted: &[usize], links: &mut [(u32, u32)]) -> u32 {
     me as u32
 }
 
-/// The compound file holding `streams`. Errors when names are invalid or the file would need
-/// more than the header's 109 FAT sectors (about 7 MB).
-pub fn write(streams: &[Stream<'_>]) -> Result<Vec<u8>, String> {
+/// The directory entries for `streams`: the root, the storages on their paths and the streams.
+fn entries_for(streams: &[Stream<'_>]) -> Result<Vec<Entry>, String> {
     let mut entries = vec![Entry { name: "Root Entry".into(), storage: true, parent: 0, data: vec![], start: END, children: vec![] }];
     for s in streams {
         let Some((last, dirs)) = s.path.split_last() else { return Err("empty stream path".into()) };
@@ -81,6 +80,13 @@ pub fn write(streams: &[Stream<'_>]) -> Result<Vec<u8>, String> {
     if entries.iter().any(|e| e.name.encode_utf16().count() > 31 || e.name.is_empty() || e.name.contains(['/', '\\', ':', '!'])) {
         return Err("invalid compound file entry name".into());
     }
+    Ok(entries)
+}
+
+/// The compound file holding `streams`. Errors when names are invalid or the file would need
+/// more than the header's 109 FAT sectors (about 7 MB).
+pub fn write(streams: &[Stream<'_>]) -> Result<Vec<u8>, String> {
+    let mut entries = entries_for(streams)?;
     // Mini stream: small streams in 64-byte sectors.
     let mut mini = Vec::new();
     let mut mini_fat: Vec<u32> = vec![];
