@@ -692,9 +692,11 @@ fn delete_connection(s: &mut Session, p: &Json) -> Result<Json> {
     })
 }
 
+/// A query as the commands report it: `source` is the database table it reads (`sql` the
+/// statement), `table` the worksheet table it fills.
 pub(crate) fn connection_json(c: &Connection) -> Json {
     let (kind, command) = match &c.command {
-        QueryCommand::Table { schema, name } => ("table", object_label(schema, name)),
+        QueryCommand::Table { schema, name } => ("source", object_label(schema, name)),
         QueryCommand::Sql { text } => ("sql", text.clone()),
     };
     json!({
@@ -1003,6 +1005,66 @@ mod tests {
                 json!({"connection": "none"}),
                 json!({"server": "x", "database": "d", "sql": "SELECT 1", "user": "sa", "password": "secret", "refreshMinutes": u64::MAX}),
             ] {
+                let r = s.execute(id, p.clone());
+                assert!(!matches!(r, Err(EngineError::Internal(..))), "{id} {p}: {r:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn reports_name_both_tables() {
+        let c = Connection {
+            id: 1,
+            name: "q".into(),
+            description: String::new(),
+            source: DataSource::SqlServer {
+                server: "s".into(),
+                database: "d".into(),
+                encrypt: true,
+                trust_server_certificate: false,
+                auth: SqlAuth::Sql,
+            },
+            user: String::new(),
+            command: QueryCommand::Table { schema: "dbo".into(), name: "Customers".into() },
+            table: "Customers_2".into(),
+            refresh_on_open: false,
+            refresh_minutes: 0,
+            refreshed: None,
+            rows: 0,
+            power_query: None,
+            kept: false,
+        };
+        let j = connection_json(&c);
+        assert_eq!((j["source"].as_str(), j["table"].as_str()), (Some("dbo.Customers"), Some("Customers_2")));
+    }
+
+    /// Every database and macro command, called with hostile params against a loaded query: none
+    /// may panic (a caught panic is `EngineError::Internal`).
+    #[test]
+    fn every_database_and_macro_command_survives_hostile_params() {
+        let fake = Fake::new();
+        let mut s = session(&fake);
+        s.execute("data.fromSqlServer", login()).unwrap();
+        let dir = std::env::temp_dir().join(format!("gridcraft-hostile-{}", std::process::id()));
+        let long = "x".repeat(70_000);
+        let hostile = [
+            json!({}),
+            json!([1, 2]),
+            json!(7),
+            json!(null),
+            json!({"server": 5, "database": [], "table": {}, "sql": true, "user": 1, "password": 2}),
+            json!({"server": long, "database": long, "table": long, "sql": long, "connection": long, "name": long}),
+            json!({"server": "db.local", "table": "[unclosed", "user": "sa", "password": "secret"}),
+            json!({"server": "db.local", "database": "Shop", "sql": "", "user": "sa", "password": "secret"}),
+            json!({"connection": "dbo Customers", "refreshMinutes": -1e308, "rows": 1e308, "range": "A1:XFD1048576"}),
+            json!({"table": "dbo_Customers", "range": "ZZZ999999999", "mode": "drop", "cells": ["A1:XFD1048576"], "params": [1e308, null, {}]}),
+            json!({"path": "\u{0}", "folder": long, "overwrite": "yes"}),
+            json!({"path": dir.join("nope.odc").to_string_lossy(), "folder": dir.to_string_lossy()}),
+            json!({"macro": long, "answers": ["a", 1e308], "inputs": [1, null]}),
+        ];
+        let ids: Vec<&str> = crate::command_specs().iter().map(|c| c.id).filter(|id| id.starts_with("data.") || id.starts_with("vba.")).collect();
+        for id in ids {
+            for p in &hostile {
                 let r = s.execute(id, p.clone());
                 assert!(!matches!(r, Err(EngineError::Internal(..))), "{id} {p}: {r:?}");
             }

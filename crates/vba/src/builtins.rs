@@ -94,6 +94,13 @@ pub fn now() -> f64 {
     gridcraft_core::date::unix_now_ms().map(|ms| ms / 86_400_000.0 + 25_569.0).unwrap_or(0.0)
 }
 
+/// A character count from a macro (`Space(n)`, `String(n, c)`): negative is "Invalid procedure
+/// call", more than a string holds "Out of memory".
+fn count(n: i64) -> Result<usize, VbaError> {
+    let n = usize::try_from(n).map_err(|_| err(5, "Invalid procedure call or argument"))?;
+    value::check_length(n)
+}
+
 fn arg(args: &[Value], i: usize) -> Value {
     args.get(i).cloned().unwrap_or(Value::Empty)
 }
@@ -137,13 +144,13 @@ pub fn call(name: &str, args: &[Value], text_compare: bool) -> Result<Option<Val
         "TRIM" | "TRIM$" => v(s(0)?.trim_matches(' ').to_string()),
         "LTRIM" | "LTRIM$" => v(s(0)?.trim_start_matches(' ').to_string()),
         "RTRIM" | "RTRIM$" => v(s(0)?.trim_end_matches(' ').to_string()),
-        "SPACE" | "SPACE$" => v(" ".repeat(int(0)?.max(0) as usize)),
+        "SPACE" | "SPACE$" => v(" ".repeat(count(int(0)?)?)),
         "STRING" | "STRING$" => {
             let c = match arg(args, 1) {
                 Value::String(s) => s.chars().next().unwrap_or(' '),
                 other => char::from_u32(other.to_i64()? as u32).unwrap_or(' '),
             };
-            v(c.to_string().repeat(int(0)?.max(0) as usize))
+            v(c.to_string().repeat(count(int(0)?)?))
         }
         "INSTR" => instr(args, false, text_compare)?,
         "INSTRREV" => instr(args, true, text_compare)?,
@@ -155,6 +162,9 @@ pub fn call(name: &str, args: &[Value], text_compare: bool) -> Result<Option<Val
                 v(t)
             } else {
                 let compare = if args.len() > 5 { int(5)? == 1 } else { text_compare };
+                // Each match can grow the text by the replacement's length.
+                let most = t.chars().count() / find.chars().count().max(1) * repl.chars().count();
+                value::check_length(t.chars().count().saturating_add(most))?;
                 v(replace(&t, &find, &repl, compare))
             }
         }
@@ -167,8 +177,10 @@ pub fn call(name: &str, args: &[Value], text_compare: bool) -> Result<Option<Val
         "JOIN" => {
             let a = as_array(&arg(args, 0))?;
             let sep = if args.len() > 1 { s(1)? } else { " ".into() };
-            let parts: Result<Vec<String>, _> = a.borrow().items.iter().map(|x| x.to_str()).collect();
-            v(parts?.join(&sep))
+            let parts: Vec<String> = a.borrow().items.iter().map(|x| x.to_str()).collect::<Result<_, _>>()?;
+            let total = parts.iter().map(String::len).fold(sep.len().saturating_mul(parts.len()), usize::saturating_add);
+            value::check_length(total)?;
+            v(parts.join(&sep))
         }
         "STRREVERSE" => v(s(0)?.chars().rev().collect::<String>()),
         "STRCOMP" => {

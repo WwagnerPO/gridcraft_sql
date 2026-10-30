@@ -331,3 +331,20 @@ End Sub"#,
     assert_eq!(cell(&s, "A2"), CV::text("C:\\data"));
     assert_eq!(cell(&s, "A3"), CV::text("same"));
 }
+
+#[test]
+fn macros_run_on_a_thread_with_room_for_deep_recursion() {
+    // 250 nested calls need more stack than a Windows main thread has: the macro thread has it.
+    let mut s = session(
+        "Attribute VB_Name = \"Module1\"\r\nFunction F(n)\r\nIf n = 0 Then\r\nF = 0\r\nElse\r\nF = F(n - 1) + 1\r\nEnd If\r\nEnd Function\r\nSub Deep()\r\nRange(\"A1\").Value = F(250)\r\nEnd Sub\r\n",
+    );
+    run(&mut s, "Deep");
+    assert_eq!(cell(&s, "A1"), CV::Number(250.0));
+    // Recursion with no end stops with "Out of stack space"; the workbook is still there.
+    let mut s = session(
+        "Attribute VB_Name = \"Module1\"\r\nFunction G(n)\r\nG = G(n + 1)\r\nEnd Function\r\nSub Endless()\r\nRange(\"A1\").Value = G(1)\r\nEnd Sub\r\n",
+    );
+    let e = s.execute("vba.run", json!({"macro": "Endless"})).unwrap_err();
+    assert!(e.to_string().contains("stack"), "{e}");
+    assert!(s.doc().is_ok());
+}

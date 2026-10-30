@@ -16,6 +16,20 @@ use crate::value::{self, BinOp, HostRef, Obj, Udt, Value};
 /// How deep calls may nest, and how many statements a single run may execute.
 const MAX_CALL_DEPTH: usize = 256;
 const MAX_STEPS: u64 = 500_000_000;
+/// Statement blocks and expressions being run at once, across calls: past it the run stops with
+/// "Out of stack space" instead of exhausting the thread's stack.
+const MAX_NEST: usize = 3000;
+/// Native stack, in bytes, a run may use below its first block: past it the run stops with "Out
+/// of stack space". Leaves room for the host's own work (a formula it calculates has its own
+/// budget) on the macro thread.
+const STACK_BUDGET: usize = 512 * 1024;
+
+/// The address of a local variable, which shows how far down the native stack this call is.
+#[inline(always)]
+fn stack_position() -> usize {
+    let marker = 0u8;
+    std::hint::black_box(&marker) as *const u8 as usize
+}
 
 /// What the interpreter asks of its host (the Excel object model). Every method may fail with a
 /// `VbaError`; `Ok(None)` from the lookups means "not something I provide".
@@ -146,6 +160,11 @@ pub struct Interp<'h> {
     /// Type name (lower) → field list, for building UDT defaults.
     types: HashMap<String, Vec<VarDecl>>,
     depth: usize,
+    /// Blocks and expressions being run (see [`MAX_NEST`]).
+    nest: usize,
+    /// Where on the native stack the outermost block started (see [`STACK_BUDGET`]).
+    stack_top: usize,
+    stack_budget: usize,
     steps: u64,
     /// The current `With` object stack.
     with_stack: Vec<Value>,
@@ -167,6 +186,9 @@ impl<'h> Interp<'h> {
             enums: HashMap::new(),
             types: HashMap::new(),
             depth: 0,
+            nest: 0,
+            stack_top: 0,
+            stack_budget: STACK_BUDGET,
             steps: 0,
             with_stack: vec![],
             text_compare: false,
@@ -285,6 +307,12 @@ impl<'h> Interp<'h> {
 
     // ------------------------------------------------------------ calls
 
+    /// Lets the run use `bytes` of native stack (default [`STACK_BUDGET`]): for a host that runs
+    /// macros on a thread with a large stack of its own.
+    pub fn set_stack_budget(&mut self, bytes: usize) {
+        self.stack_budget = bytes;
+    }
+
     /// Stops the run when `flag` becomes true (checked every few hundred statements).
     pub fn set_cancel(&mut self, flag: std::sync::Arc<std::sync::atomic::AtomicBool>) {
         self.cancel = Some(flag);
@@ -381,7 +409,26 @@ impl<'h> Interp<'h> {
 
     // ------------------------------------------------------------ statements
 
+    /// Runs `f` one block or expression deeper.
+    fn nested<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T, VbaError>) -> Result<T, VbaError> {
+        let here = stack_position();
+        if self.nest == 0 {
+            self.stack_top = here;
+        }
+        if self.nest >= MAX_NEST || self.stack_top.abs_diff(here) > self.stack_budget {
+            return Err(err(28, "Out of stack space"));
+        }
+        self.nest += 1;
+        let r = f(self);
+        self.nest -= 1;
+        r
+    }
+
     fn exec_lines(&mut self, lines: &[Line], scope: &mut Scope, ctx: &mut ProcCtx) -> Result<Flow, VbaError> {
+        self.nested(|it| it.exec_lines_inner(lines, scope, ctx))
+    }
+
+    fn exec_lines_inner(&mut self, lines: &[Line], scope: &mut Scope, ctx: &mut ProcCtx) -> Result<Flow, VbaError> {
         let mut i = 0usize;
         while i < lines.len() {
             self.step()?;
@@ -739,6 +786,10 @@ impl<'h> Interp<'h> {
     // ------------------------------------------------------------ expressions
 
     fn eval(&mut self, e: &Expr, scope: &mut Scope) -> Result<Value, VbaError> {
+        self.nested(|it| it.eval_inner(e, scope))
+    }
+
+    fn eval_inner(&mut self, e: &Expr, scope: &mut Scope) -> Result<Value, VbaError> {
         self.step()?;
         match e {
             Expr::Lit(tok) => Ok(lit_value(tok)),

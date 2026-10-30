@@ -116,7 +116,7 @@ merges, changed types, other sources) are kept unchanged but not shown.
 | `data.dataSourceSettings` | list, set (`{server, user, password}`) or clear (`{server, clear: true}`) kept logins |
 | `data.connectionProperties` | `{connection, name?, description?, refreshOnOpen?, refreshMinutes?, sql?, table?, user?}` |
 | `data.deleteConnection` | `{connection}` |
-| `data.queriesConnections` | `{tables, connections}` |
+| `data.queriesConnections` | `{tables, connections: [{name, server, database, user, source \| sql, table, …}]}` (`source` the database table, `table` the worksheet table) |
 | `data.saveToDatabase` | `{table? \| connection?, dryRun?}` → `{inserted, updated, deleted}` |
 | `data.exportToSqlServer` | `{table, range?, mode?: create \| append \| replace, connection? \| server…, dryRun?}` |
 | `data.sqlExecute` | `{sql, params? \| cells?, connection? \| server…}` → `{rowsAffected}` |

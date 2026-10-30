@@ -7,14 +7,20 @@ use crate::value::BinOp;
 
 pub fn parse_module(name: &str, src: &str) -> Result<Module, VbaError> {
     let toks = tokenize(name, src)?;
-    let mut p = Parser { t: toks, i: 0, module: name.to_string() };
+    let mut p = Parser { t: toks, i: 0, module: name.to_string(), nesting: 0 };
     p.module()
 }
+
+/// Deeper nesting of expressions or blocks is refused ("Expression too complex"), so parsing and
+/// running a module never exhausts the stack.
+const MAX_NESTING: usize = 128;
 
 struct Parser {
     t: Vec<Token>,
     i: usize,
     module: String,
+    /// Expressions and blocks being parsed, innermost last.
+    nesting: usize,
 }
 
 fn kw(t: &Tok, k: &str) -> bool {
@@ -363,12 +369,27 @@ impl Parser {
     // ------------------------------------------------------------ statements
 
     /// Whether the next statement starts with one of `ends` (keyword sequences).
+    /// Runs `f` one nesting level deeper.
+    fn nested<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T, VbaError>) -> Result<T, VbaError> {
+        if self.nesting >= MAX_NESTING {
+            return Err(self.err("Expression too complex"));
+        }
+        self.nesting += 1;
+        let r = f(self);
+        self.nesting -= 1;
+        r
+    }
+
     fn at_terminator(&self, ends: &[&[&str]]) -> bool {
         ends.iter().any(|seq| seq.iter().enumerate().all(|(k, w)| kw(self.peek_at(k), w)))
     }
 
     /// Lines up to (not including) a terminator.
     fn block(&mut self, ends: &[&[&str]]) -> Result<Vec<Line>, VbaError> {
+        self.nested(|p| p.block_lines(ends))
+    }
+
+    fn block_lines(&mut self, ends: &[&[&str]]) -> Result<Vec<Line>, VbaError> {
         let mut out = vec![];
         loop {
             self.skip_separators();
@@ -876,7 +897,7 @@ impl Parser {
     // ------------------------------------------------------------ expressions
 
     pub fn expr(&mut self) -> Result<Expr, VbaError> {
-        self.binary_level(0)
+        self.nested(|p| p.binary_level(0))
     }
 
     fn binary_level(&mut self, level: usize) -> Result<Expr, VbaError> {
@@ -897,7 +918,7 @@ impl Parser {
 
     fn not_level(&mut self) -> Result<Expr, VbaError> {
         if self.eat_kw("Not") {
-            return Ok(Expr::Unary(UnOp::Not, Box::new(self.not_level()?)));
+            return Ok(Expr::Unary(UnOp::Not, Box::new(self.nested(Self::not_level)?)));
         }
         self.comparison()
     }
@@ -984,10 +1005,10 @@ impl Parser {
 
     fn unary(&mut self) -> Result<Expr, VbaError> {
         if self.eat_op("-") {
-            return Ok(Expr::Unary(UnOp::Neg, Box::new(self.unary()?)));
+            return Ok(Expr::Unary(UnOp::Neg, Box::new(self.nested(Self::unary)?)));
         }
         if self.eat_op("+") {
-            return self.unary();
+            return self.nested(Self::unary);
         }
         self.power()
     }
@@ -1176,7 +1197,7 @@ End Sub"#,
 
     #[test]
     fn precedence() {
-        let mut p = Parser { t: tokenize("M", "-2 ^ 2 + 3 * 4 & \"x\" = \"a\" And Not b").unwrap(), i: 0, module: "M".into() };
+        let mut p = Parser { t: tokenize("M", "-2 ^ 2 + 3 * 4 & \"x\" = \"a\" And Not b").unwrap(), i: 0, module: "M".into(), nesting: 0 };
         let e = p.expr().unwrap();
         let Expr::Binary(BinOp::And, l, _) = e else { panic!("{e:?}") };
         let Expr::Binary(BinOp::Eq, l, _) = *l else { panic!() };

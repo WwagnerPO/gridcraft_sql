@@ -24,8 +24,9 @@ pub fn sheet_buttons(sh: &gridcraft_model::Sheet) -> Vec<FormButton> {
     sh.preserved.as_deref().map(gridcraft_xlsx::form_controls::buttons).unwrap_or_default()
 }
 
-/// What a macro shows the person running it.
-pub trait MacroUi {
+/// What a macro shows the person running it. Macros run on a thread of their own, so it is
+/// `Send`.
+pub trait MacroUi: Send {
     /// A message box; returns the button pressed (`vbOK` = 1, `vbYes` = 6…).
     fn msgbox(&mut self, prompt: &str, buttons: i64, title: &str) -> i64;
     /// An input box; `None` when cancelled.
@@ -1917,15 +1918,20 @@ pub fn run_macro_from(
     let uid = s.active().map(|d| d.uid).ok_or_else(|| err(91, "no workbook"))?;
     let undo_before = s.active().map(|d| d.undo.len()).unwrap_or(0);
     let journal_before = s.journal.len();
-    let result = {
+    let result = on_macro_thread(|budget| {
         let mut host = ExcelHost::new(s, ui);
         host.caller = caller;
         let mut interp = gridcraft_vba::Interp::new(program, &mut host);
+        if let Some(budget) = budget {
+            interp.set_stack_budget(budget);
+        }
         if let Some(c) = cancel {
             interp.set_cancel(c);
         }
-        interp.run(name, vec![])
-    };
+        // A value can't leave the macro's thread (it may hold references): its text does.
+        interp.run(name, vec![]).map(|v| v.to_str().unwrap_or_default())
+    })
+    .map(V::str);
     // One undo step for the whole macro: keep the state from before it, drop the rest.
     if let Some(d) = s.docs.iter_mut().find(|d| d.uid == uid)
         && d.undo.len() > undo_before + 1
@@ -1947,6 +1953,29 @@ pub fn run_macro_from(
         }
         other => other,
     }
+}
+
+/// Native stack of the thread a macro runs on, and how much of it the interpreter may use (the
+/// rest is for the workbook work it asks for: a formula it calculates has its own budget).
+const MACRO_STACK: usize = 64 << 20;
+const MACRO_STACK_BUDGET: usize = 48 << 20;
+
+/// Runs a macro on a thread of its own with [`MACRO_STACK`] of stack, whatever thread asked
+/// (a Windows main thread has 1 MiB), giving `run` the stack budget it may use. A panic in it
+/// (a bug) ends the macro with an error; the workbook stays as the macro left it. Without
+/// threads (the web) it runs here with the interpreter's own small budget.
+fn on_macro_thread(run: impl FnOnce(Option<usize>) -> Result<String, VbaError> + Send) -> Result<String, VbaError> {
+    if cfg!(target_arch = "wasm32") {
+        return run(None);
+    }
+    std::thread::scope(|scope| {
+        let worker =
+            std::thread::Builder::new().name("gridcraft-vba".into()).stack_size(MACRO_STACK).spawn_scoped(scope, || run(Some(MACRO_STACK_BUDGET)));
+        match worker {
+            Ok(handle) => handle.join().unwrap_or_else(|_| Err(err(51, "The macro stopped because of an internal error"))),
+            Err(e) => Err(err(7, format!("The macro couldn't start: {e}"))),
+        }
+    })
 }
 
 mod objects;

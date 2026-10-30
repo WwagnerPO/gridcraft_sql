@@ -42,18 +42,30 @@ Actualizado: 2026-10-30.
 
 ## Calidad
 
-- [ ] Auditoría: topes de memoria en fórmulas (`SEQUENCE`, `REPT`, `MAKEARRAY`, columnas enteras).
-- [ ] Auditoría: conversiones `as` con números del usuario (`f64 as usize`, negativos).
-- [ ] Auditoría: nombres definidos que se refieren a sí mismos y `LAMBDA` recursivo.
-- [ ] Parámetros hostiles (tipos erróneos, rangos enormes) en el canal de control y MCP para
-  nuestros comandos (`data.*` de bases de datos, `vba.*`).
-- [ ] `cargo audit` y `cargo deny` (vulnerabilidades y licencias: nada GPL).
+- [ ] `cargo audit` (vulnerabilidades conocidas) en cada actualización del oficial.
+- [ ] `cargo deny` (licencias: nada GPL) — no instalado aún.
+- [ ] Los 2 tests de UI que fallan sin fuentes (`interaction::column_autocomplete_folds_case_beyond_ascii`,
+  `interaction::language_switch_renders_the_ribbon_and_persists`): pasar con `CRAFT_FONTS_DIR` en la
+  máquina de desarrollo para confirmar que son solo del entorno.
 
 ## Descartado
 
 - Iniciar sesión con Microsoft Entra (cuentas de Azure): no se hará (2026-10-30).
 
 ## Hecho
+
+- [x] 2026-10-30: **auditoría de calidad** de lo propio:
+  - Macros: anidamiento profundo (paréntesis, `If`, `Not`) cerraba la app → "Expression too
+    complex"; recursión con presupuesto de pila → "Out of stack space"; las macros corren en un
+    hilo propio de 64 MB (llamadas recursivas profundas funcionan también en Windows).
+  - Macros: un fallo interno ya no pierde el libro (el hilo devuelve siempre la sesión).
+  - Macros: `Like` con varios `*` se colgaba (exponencial) → lineal.
+  - Macros: `Space`/`String`/`&`/`Replace`/`Join` gigantes y `ReDim` enorme o con límites que
+    desbordan → error 7 "Out of memory" en vez de agotar la memoria.
+  - SQL: `data.queriesConnections` perdía la tabla de origen (clave `table` repetida) → `source`.
+  - Fuzz nuevo: todos los comandos `data.*` y `vba.*` con parámetros hostiles, sin panics.
+  - Comprobado sin cambios: fórmulas gigantes (`SEQUENCE`, `REPT`, `MUNIT`, `MAKEARRAY`, columnas
+    enteras), nombres que se refieren a sí mismos y `LAMBDA` recursivo dan error, no crash.
 
 - [x] 2026-10-30: **conexiones guardadas en el equipo** como Excel (`.odc` en
   `Documentos/My Data Sources`): Exportar archivo de conexión, Conexiones existentes, abrir una

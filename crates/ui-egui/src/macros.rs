@@ -100,8 +100,14 @@ pub fn start_from(app: &mut SheetApp, name: &str, caller: Option<String>) {
         let macro_name = name.to_string();
         let spawned = std::thread::Builder::new().name("gridcraft-macro".into()).spawn(move || {
             let mut ui = ChannelUi { tx };
-            let r = gridcraft_engine::vba_host::run_macro_from(&mut session, &macro_name, &mut ui, Some(stop), caller);
-            (session, r.map(|v| v.to_str().unwrap_or_default()).map_err(|e| e.to_string()))
+            // A panic (a bug) must not take the workbook with it: the session always comes back.
+            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                gridcraft_engine::vba_host::run_macro_from(&mut session, &macro_name, &mut ui, Some(stop), caller)
+                    .map(|v| v.to_str().unwrap_or_default())
+                    .map_err(|e| e.to_string())
+            }))
+            .unwrap_or_else(|_| Err("The macro stopped because of an internal error. The workbook is as the macro left it.".into()));
+            (session, r)
         });
         match spawned {
             Ok(handle) => {

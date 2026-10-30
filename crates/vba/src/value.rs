@@ -24,17 +24,21 @@ pub struct Array {
     pub fixed: bool,
 }
 
+/// The most elements an array can hold (a ReDim past it is "Out of memory").
+pub const MAX_ARRAY_ITEMS: usize = 16_000_000;
+
 impl Array {
     pub fn new(bounds: Vec<(i64, i64)>, fill: Value) -> Result<Array, VbaError> {
         let mut n: usize = 1;
         for (lo, hi) in &bounds {
-            if hi < lo && !(hi + 1 == *lo) {
+            if hi < lo && hi.checked_add(1) != Some(*lo) {
                 return Err(err(9, "Subscript out of range"));
             }
-            let len = usize::try_from((hi - lo + 1).max(0)).map_err(|_| err(7, "Out of memory"))?;
+            let len = hi.checked_sub(*lo).and_then(|d| d.checked_add(1)).ok_or_else(|| err(7, "Out of memory"))?;
+            let len = usize::try_from(len.max(0)).map_err(|_| err(7, "Out of memory"))?;
             n = n.checked_mul(len).ok_or_else(|| err(7, "Out of memory"))?;
         }
-        if n > 50_000_000 {
+        if n > MAX_ARRAY_ITEMS {
             return Err(err(7, "Out of memory"));
         }
         Ok(Array { bounds, items: vec![fill; n], fixed: false })
@@ -526,7 +530,9 @@ pub fn binary(op: BinOp, a: &Value, b: &Value, text_compare: bool) -> Result<Val
                 return Ok(Value::Null);
             }
             let s = |v: &Value| if matches!(v, Value::Null) { Ok(String::new()) } else { v.to_str() };
-            return Ok(Value::str(format!("{}{}", s(a)?, s(b)?)));
+            let (x, y) = (s(a)?, s(b)?);
+            check_length(x.len().saturating_add(y.len()))?;
+            return Ok(Value::str(x + &y));
         }
         Is => {
             return match (a, b) {
@@ -718,47 +724,118 @@ pub fn compare(a: &Value, b: &Value, text: bool) -> Result<std::cmp::Ordering, V
     Ok(x.partial_cmp(&y).unwrap_or(std::cmp::Ordering::Equal))
 }
 
+/// The longest string a macro can build, in characters: longer ones stop the run with
+/// "Out of memory" instead of exhausting the computer's memory.
+pub const MAX_STRING_CHARS: usize = 1 << 26;
+
+/// `Ok(n)` when a string of `n` characters may be built.
+pub fn check_length(n: usize) -> Result<usize, VbaError> {
+    if n > MAX_STRING_CHARS { Err(err(7, "Out of memory")) } else { Ok(n) }
+}
+
+/// One element of a `Like` pattern.
+enum LikeTok {
+    /// `*`: any run of characters.
+    Star,
+    /// `?`: any one character.
+    Any,
+    /// `#`: one digit.
+    Digit,
+    /// `[a-z]`, `[!a-z]`: one character in (or, negated, not in) the set.
+    Class(bool, Vec<char>),
+    Char(char),
+}
+
+impl LikeTok {
+    fn matches(&self, ch: char) -> bool {
+        match self {
+            LikeTok::Star => true,
+            LikeTok::Any => true,
+            LikeTok::Digit => ch.is_ascii_digit(),
+            LikeTok::Char(c) => *c == ch,
+            LikeTok::Class(neg, set) => {
+                let mut hit = false;
+                let mut i = 0;
+                while let Some(&first) = set.get(i) {
+                    match (set.get(i + 1), set.get(i + 2)) {
+                        (Some('-'), Some(&last)) => {
+                            hit |= first <= ch && ch <= last;
+                            i += 3;
+                        }
+                        _ => {
+                            hit |= first == ch;
+                            i += 1;
+                        }
+                    }
+                }
+                // An empty set matches nothing.
+                !set.is_empty() && hit != *neg
+            }
+        }
+    }
+}
+
+fn like_tokens(p: &[char]) -> Vec<LikeTok> {
+    let mut out = vec![];
+    let mut i = 0;
+    while let Some(&c) = p.get(i) {
+        i += 1;
+        out.push(match c {
+            '*' => LikeTok::Star,
+            '?' => LikeTok::Any,
+            '#' => LikeTok::Digit,
+            '[' => match p.get(i..).and_then(|rest| rest.iter().position(|&x| x == ']')) {
+                // An unclosed `[` is itself.
+                None => LikeTok::Char('['),
+                Some(close) => {
+                    let set = p.get(i..i + close).unwrap_or_default();
+                    i += close + 1;
+                    match set.split_first() {
+                        Some(('!', rest)) => LikeTok::Class(true, rest.to_vec()),
+                        _ => LikeTok::Class(false, set.to_vec()),
+                    }
+                }
+            },
+            c => LikeTok::Char(c),
+        });
+    }
+    out
+}
+
 /// The `Like` operator: `?` one character, `*` any run, `#` one digit, `[a-z]`, `[!a-z]`.
+/// Matched without backtracking past the last `*`, so any pattern takes time in proportion to the
+/// text times the pattern.
 pub fn like(s: &str, pattern: &str, text: bool) -> bool {
     let (s, p): (Vec<char>, Vec<char>) = if text {
         (s.to_lowercase().chars().collect(), pattern.to_lowercase().chars().collect())
     } else {
         (s.chars().collect(), pattern.chars().collect())
     };
-    fn m(s: &[char], p: &[char], depth: usize) -> bool {
-        if depth > 10_000 {
-            return false;
-        }
-        let Some((&c, rest)) = p.split_first() else { return s.is_empty() };
-        match c {
-            '*' => (0..=s.len()).any(|i| m(&s[i..], rest, depth + 1)),
-            '?' => !s.is_empty() && m(&s[1..], rest, depth + 1),
-            '#' => s.first().is_some_and(|x| x.is_ascii_digit()) && m(&s[1..], rest, depth + 1),
-            '[' => {
-                let Some(close) = rest.iter().position(|&x| x == ']') else { return s.first() == Some(&'[') && m(&s[1..], rest, depth + 1) };
-                let set = &rest[..close];
-                let (neg, set) = match set.split_first() {
-                    Some(('!', r)) => (true, r),
-                    _ => (false, set),
-                };
-                let Some(&ch) = s.first() else { return false };
-                let mut hit = false;
-                let mut i = 0;
-                while i < set.len() {
-                    if i + 2 < set.len() && set[i + 1] == '-' {
-                        hit |= set[i] <= ch && ch <= set[i + 2];
-                        i += 3;
-                    } else {
-                        hit |= set[i] == ch;
-                        i += 1;
-                    }
-                }
-                hit != neg && m(&s[1..], &rest[close + 1..], depth + 1)
+    let p = like_tokens(&p);
+    let (mut si, mut pi) = (0usize, 0usize);
+    // The last `*` seen and where in the text it was tried up to.
+    let mut star: Option<(usize, usize)> = None;
+    while let Some(&ch) = s.get(si) {
+        match p.get(pi) {
+            Some(LikeTok::Star) => {
+                star = Some((pi, si));
+                pi += 1;
             }
-            c => s.first() == Some(&c) && m(&s[1..], rest, depth + 1),
+            Some(t) if t.matches(ch) => {
+                si += 1;
+                pi += 1;
+            }
+            _ => match star {
+                Some((sp, ss)) => {
+                    pi = sp + 1;
+                    si = ss + 1;
+                    star = Some((sp, ss + 1));
+                }
+                None => return false,
+            },
         }
     }
-    m(&s, &p, 0)
+    p.get(pi..).unwrap_or_default().iter().all(|t| matches!(t, LikeTok::Star))
 }
 
 #[cfg(test)]
@@ -803,6 +880,14 @@ mod tests {
         assert!(like("d", "[!a-c]", false));
         assert!(like("ABC", "a?c", true));
         assert!(!like("ABC", "a?c", false));
+        assert!(like("", "*", false) && like("", "", false) && !like("a", "", false));
+        assert!(like("a[b", "a[b", false), "an unclosed [ is itself");
+        assert!(!like("a", "[]", false));
+        assert!(like("x-1", "[a-z][-]#", false));
+        assert!(like("aXbXc", "a*b*c", false) && !like("aXbXd", "a*b*c", false));
+        // Patterns that took exponential time with backtracking (the test hung) finish at once.
+        assert!(!like(&"a".repeat(5000), "*a*a*a*a*a*a*a*a*a*a*a*a*b", false));
+        assert!(like(&"a".repeat(100_000), &"*a".repeat(50), false));
     }
 
     #[test]

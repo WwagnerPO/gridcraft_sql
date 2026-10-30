@@ -193,3 +193,64 @@ fn hostile_sources_never_panic() {
         let _ = crate::run(&[("M".into(), src.into())], "T", vec![], &mut host);
     }
 }
+
+/// Runs `src` on a thread with a 2 MiB stack, as small as a thread usually gets.
+fn run_on_small_stack(src: String) -> Result<String, VbaError> {
+    std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(move || {
+            let mut host = TestHost::default();
+            crate::run(&[("M".into(), src)], "T", vec![], &mut host).map(|v| v.to_str().unwrap_or_default())
+        })
+        .unwrap()
+        .join()
+        .map_err(|_| err(51, "the thread died"))
+        .and_then(|r| r)
+}
+
+#[test]
+fn deep_nesting_is_refused_not_a_crash() {
+    // These overflowed the stack and killed the app.
+    let parens = format!("Function T()\r\n T = {}1{}\r\nEnd Function", "(".repeat(100_000), ")".repeat(100_000));
+    let ifs = format!("Function T()\r\n{}T = 1\r\n{}End Function", "If 1 Then\r\n".repeat(20_000), "End If\r\n".repeat(20_000));
+    let nots = format!("Function T()\r\n T = {}True\r\nEnd Function", "Not ".repeat(100_000));
+    for src in [parens, ifs, nots] {
+        let e = run_on_small_stack(src).unwrap_err();
+        assert!(e.description.contains("too complex"), "{e:?}");
+    }
+    // Recursion through nested blocks stops with "Out of stack space".
+    let body = format!("{}F = F(n - 1) + 1\r\n{}", "If n > 0 Then\r\n".repeat(120), "End If\r\n".repeat(120));
+    let e = run_on_small_stack(format!("Function F(n)\r\n{body}End Function\r\nFunction T()\r\n T = F(250)\r\nEnd Function")).unwrap_err();
+    assert_eq!(e.number, 28);
+    // Shallow recursion still runs.
+    let r = run_on_small_stack(
+        "Function F(n)\r\nIf n = 0 Then\r\nF = 0\r\nElse\r\nF = F(n - 1) + 1\r\nEnd If\r\nEnd Function\r\nFunction T()\r\n T = F(20)\r\nEnd Function"
+            .into(),
+    );
+    assert_eq!(r.unwrap(), "20");
+}
+
+#[test]
+fn huge_strings_and_arrays_are_out_of_memory() {
+    for src in [
+        "Function T()\r\n T = Space(1000000000000)\r\nEnd Function",
+        "Function T()\r\n T = String(1000000000000, \"x\")\r\nEnd Function",
+        "Function T()\r\n s = \"ab\"\r\n For i = 1 To 60\r\n  s = s & s\r\n Next\r\n T = s\r\nEnd Function",
+        "Function T()\r\n s = String(100000, \"a\")\r\n T = Replace(s, \"a\", String(100000, \"b\"))\r\nEnd Function",
+        "Function T()\r\n Dim a()\r\n ReDim a(1 To 100000000)\r\nEnd Function",
+    ] {
+        let mut host = TestHost::default();
+        let e = crate::run(&[("M".into(), src.into())], "T", vec![], &mut host).unwrap_err();
+        assert_eq!(e.number, 7, "{src}: {e:?}");
+    }
+    // Bounds that overflow are an error, not a panic.
+    let mut host = TestHost::default();
+    let r = crate::run(
+        &[("M".into(), "Function T()\r\n Dim a()\r\n ReDim a(-9223372036854775807 To 9223372036854775807)\r\nEnd Function".into())],
+        "T",
+        vec![],
+        &mut host,
+    );
+    assert!(r.is_err());
+    assert_eq!(val("F = Len(Space(3) & String(2, \"x\"))").to_i64().unwrap(), 5);
+}
