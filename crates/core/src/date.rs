@@ -59,6 +59,22 @@ pub fn unix_now_ms() -> Option<f64> {
     }
 }
 
+/// The local wall-clock time as milliseconds on the Unix scale (UTC plus the time zone's current
+/// offset): what NOW() and TODAY() show, as in Excel, which reads the computer's local time.
+pub fn local_now_ms() -> Option<f64> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let now = chrono::Local::now();
+        Some(now.timestamp_millis() as f64 + f64::from(chrono::Offset::fix(now.offset()).local_minus_utc()) * 1000.0)
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let d = js_sys::Date::new_0();
+        // getTimezoneOffset is UTC minus local, in minutes.
+        Some(d.get_time() - d.get_timezone_offset() * 60_000.0)
+    }
+}
+
 /// Date serial (1900 system, with fraction) for a Unix time in milliseconds.
 pub fn serial_from_unix_ms(ms: f64) -> f64 {
     25569.0 + ms / 86_400_000.0
@@ -383,5 +399,18 @@ mod tests {
         let d = datetime_from_serial(s, 1.0).ok_or_else(|| std::io::Error::other("first serial should convert"))?;
         assert_eq!(d.weekday, 0); // 1900-01-01 was a Sunday in Excel's calendar
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod local_time_tests {
+    /// NOW() is the local wall clock: UTC moved by a whole time-zone offset (a multiple of 15
+    /// minutes, at most 14 hours).
+    #[test]
+    fn local_now_is_utc_plus_the_zone_offset() {
+        let (Some(local), Some(utc)) = (super::local_now_ms(), super::unix_now_ms()) else { return };
+        let offset_min = ((local - utc) / 60_000.0).round();
+        assert!(offset_min.abs() <= 14.0 * 60.0, "{offset_min}");
+        assert_eq!(offset_min % 15.0, 0.0, "{offset_min}");
     }
 }

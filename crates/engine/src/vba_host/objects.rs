@@ -315,6 +315,7 @@ fn encode(text: &str, charset: &str) -> Vec<u8> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn io_err(e: std::io::Error, path: &str) -> VbaError {
     match e.kind() {
         std::io::ErrorKind::NotFound => err(53, format!("File not found: {path}")),
@@ -344,10 +345,12 @@ fn write_file(_: &str, _: &[u8], _: bool) -> Result<(), VbaError> {
 }
 
 /// Larger text files aren't opened for input.
+#[cfg(not(target_arch = "wasm32"))]
 const MAX_TEXT_FILE: u64 = 64 << 20;
 
 /// What `Open … For Input` reads: UTF-8 (with or without its byte-order mark) or UTF-16 when the
 /// file says so, else ANSI (Windows-1252), as VBA reads files.
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) fn decode_text(bytes: &[u8]) -> String {
     if let Some(rest) = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]) {
         return String::from_utf8_lossy(rest).into_owned();

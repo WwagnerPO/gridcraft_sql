@@ -678,7 +678,7 @@ pub fn queries_pane(app: &mut SheetApp, ui: &mut Ui) {
                 .unwrap_or_default();
             ui.label(RichText::new(format!("{} {}", c.rows, tr(app, "rows loaded."))).small());
             if !when.is_empty() {
-                ui.label(RichText::new(format!("{} {when} (UTC)", tr(app, "Last refreshed"))).small().weak());
+                ui.label(RichText::new(format!("{} {when}", tr(app, "Last refreshed"))).small().weak());
             }
             ui.label(RichText::new(format!("{} · {}", c.source.server(), c.source.database())).small().weak());
             ui.horizontal(|ui| {

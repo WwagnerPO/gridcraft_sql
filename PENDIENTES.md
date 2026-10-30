@@ -7,6 +7,11 @@ Actualizado: 2026-10-30.
 
 ## Integración con el oficial
 
+- [ ] **Sincronizar con el oficial**: el 2026-10-30 lleva 239 commits nuevos.
+- [ ] **Avisar al oficial** (`storytold/gridcraft`) de dos fallos suyos arreglados aquí: `AHORA()`/`HOY()`
+  en UTC en vez de hora local (`core/src/date.rs`, `calc/src/recalc.rs` `now_serial`), y la pérdida
+  del `codeName` de las hojas al guardar (`xlsx/src/sheet_write.rs`).
+
 - [ ] **Colores de los iconos de base de datos.** El oficial pasó los iconos a la paleta del tema
   (`Palette`/`Cat`); `icons/database.rs` sigue con verde y azul fijos. Pasarlos a la paleta para el
   modo oscuro.
@@ -21,8 +26,8 @@ Actualizado: 2026-10-30.
 - [ ] **Consultas en segundo plano**: hoy la ventana espera a que termine la consulta.
 - [ ] **Editor de Power Query**: filtrar, combinar y cambiar tipos antes de cargar (hoy solo con
   SQL escrito a mano).
-- [ ] Guardar en el archivo la **hora de la última actualización**, en hora local (hoy UTC y no se
-  guarda).
+- [ ] Guardar en el archivo la **hora de la última actualización** (hoy solo en memoria; ya en hora
+  local).
 - [ ] CLI y MCP: **recordar inicios de sesión** entre ejecuciones (hoy hay que pasar usuario y
   contraseña cada vez).
 
@@ -56,6 +61,12 @@ Actualizado: 2026-10-30.
 - Iniciar sesión con Microsoft Entra (cuentas de Azure): no se hará (2026-10-30).
 
 ## Hecho
+
+- [x] 2026-10-30: **`AHORA()`, `HOY()` y la hora local**: el oficial usaba la hora UTC para
+  `AHORA()`/`HOY()`, Ctrl+; / Ctrl+Mayús+;, el formato condicional "hoy", la fecha de los
+  encabezados y la "Última actualización" de las consultas (en España, 1–2 h de diferencia y
+  `HOY()` con el día anterior de 00:00 a 02:00). Ahora es la hora local, también en la web.
+  `cargo xtask wasm` pasa.
 
 - [x] 2026-10-30: **ficheros de texto en macros**: `Open … For Input/Output/Append`, `Print #`,
   `Write #`, `Input #`, `Line Input #`, `Close`, `Reset`, `EOF`, `LOF`, `FreeFile` (ANSI como VBA).

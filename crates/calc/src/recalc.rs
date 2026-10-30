@@ -500,7 +500,8 @@ fn fill_spill(sheet: &mut gridcraft_model::Sheet, anchor: CellRef, range: RangeR
 /// UTC; the local offset isn't available without platform calls. Falls back to a fixed date only
 /// when no clock is available.
 pub fn now_serial() -> f64 {
-    gridcraft_core::date::unix_now_ms().map_or(46302.5, gridcraft_core::date::serial_from_unix_ms)
+    // Local time, as Excel's NOW() (the Unix clock alone is UTC).
+    gridcraft_core::date::local_now_ms().map_or(46302.5, gridcraft_core::date::serial_from_unix_ms)
 }
 
 /// Evaluates a formula in the context of a cell without storing it (conditional formats, data

@@ -83,6 +83,7 @@ En los archivos **compartidos** sólo hay líneas de enganche (cada una llama a 
 | `engine/src/lib.rs` (`Session::execute`) | al final del comando exterior, `vba_host::events::after_command` (eventos VBA) |
 | `engine/src/io.rs` | `script_sandbox_check` es `pub(crate)` (los archivos `.odc` respetan el sandbox de scripts) |
 | `model/src/sheet.rs`, `xlsx/src/{sheet_read,sheet_write}.rs` | `Sheet::code_name` (`<sheetPr codeName>`) |
+| `core/src/date.rs`, `calc/src/recalc.rs` | `local_now_ms` y `now_serial` en hora local (arreglo de un fallo del oficial) |
 | `engine/src/cmd/extra.rs`, `cmd/extra/data.rs` | Queries & Connections (descripción y `queries`) |
 | `engine/src/cmd/insert/table.rs` | renombrar tabla / convertir a rango arrastran su conexión |
 | `engine/src/cmd/pivot.rs`, `cmd/pivot/layout.rs` | Refresh All refresca primero las consultas |
