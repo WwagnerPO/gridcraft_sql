@@ -15,6 +15,8 @@ fn harness(modules: &[(&str, bool, &str)]) -> Harness {
     session.new_workbook();
     let bin = gridcraft_xlsx::ovba::tests_support::sample_project(modules);
     std::sync::Arc::make_mut(&mut session.doc_mut().unwrap().wb).vba_project = Some(std::sync::Arc::new(bin));
+    // As a macro-enabled workbook arrives: from a file, macros disabled until enabled.
+    session.doc_mut().unwrap().trust = gridcraft_engine::Trust::FromFile;
     let b = egui_kittest::Harness::builder().with_step_dt(1.0 / 60.0).with_size(vec2(1000.0, 600.0));
     let b = if std::env::var_os("GRIDCRAFT_SNAPSHOT_DIR").is_some() { b.wgpu() } else { b };
     let mut h = b.build_ui_state(
@@ -26,6 +28,12 @@ fn harness(modules: &[(&str, bool, &str)]) -> Harness {
     );
     h.run_steps(4);
     h
+}
+
+/// Enable Content on the security bar.
+fn enable(h: &mut Harness) {
+    h.state_mut().open_dialog("enableMacros", json!({}));
+    h.run_steps(2);
 }
 
 /// Frames until the running macro asks something or ends.
@@ -53,6 +61,7 @@ fn run_from_the_dialog_and_answer_a_message_box() {
         true,
         "Attribute VB_Name = \"Module1\"\r\nSub Saludo()\r\n    If MsgBox(\"¿Escribir?\", vbYesNo) = vbYes Then Range(\"A1\").Value = \"sí\" Else Range(\"A1\").Value = \"no\"\r\n    Range(\"A2\").Value = 42\r\nEnd Sub\r\n",
     )]);
+    enable(&mut h);
     h.state_mut().open_dialog("macros", json!({}));
     h.run_steps(4);
     assert!(h.query_by_label("Module1.Saludo").is_some(), "the macro is listed");
@@ -87,6 +96,7 @@ fn run_from_the_dialog_and_answer_a_message_box() {
 #[test]
 fn stop_interrupts_a_runaway_macro() {
     let mut h = harness(&[("Module1", true, "Sub Forever()\r\n    Do\r\n        Range(\"A1\").Value = 1\r\n    Loop\r\nEnd Sub\r\n")]);
+    enable(&mut h);
     gridcraft_ui_egui::macros::start(h.state_mut(), "Forever");
     h.run_steps(3);
     assert!(h.state().ext.macro_run.is_some());

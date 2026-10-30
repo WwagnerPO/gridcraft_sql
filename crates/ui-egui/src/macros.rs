@@ -275,9 +275,7 @@ pub fn list(app: &SheetApp) -> Vec<String> {
 /// Enable Content: the user trusts the workbook's macros. Runs `Workbook_Open` / `Auto_Open`.
 pub fn enable(app: &mut SheetApp) {
     let Some(uid) = app.session.active().map(|d| d.uid) else { return };
-    if !app.ext.macros_enabled.contains(&uid) {
-        app.ext.macros_enabled.push(uid);
-    }
+    gridcraft_engine::vba_host::trust_macros(&mut app.session, uid, true);
     app.notice = None;
     let names = app
         .session

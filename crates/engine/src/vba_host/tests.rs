@@ -348,3 +348,30 @@ fn macros_run_on_a_thread_with_room_for_deep_recursion() {
     assert!(e.to_string().contains("stack"), "{e}");
     assert!(s.doc().is_ok());
 }
+
+#[test]
+fn macros_from_a_file_run_only_once_enabled() {
+    let code = "Attribute VB_Name = \"Module1\"\r\nSub Mark()\r\nRange(\"A1\").Value = 1\r\nEnd Sub\r\n";
+    let made_here = session(code);
+    let wb = made_here.doc().unwrap().wb.as_ref().clone();
+    // The same workbook as it arrives from a file.
+    let mut s = Session::new();
+    s.add_document(crate::DocState::new(wb, None, "Book.xlsm".into(), crate::Trust::FromFile));
+    for (id, p) in [("vba.run", json!({"macro": "Mark"})), ("vba.click", json!({"button": "Button 1"}))] {
+        let e = s.execute(id, p).unwrap_err().to_string();
+        assert!(e.contains("disabled") || e.contains("no button"), "{id}: {e}");
+    }
+    assert_eq!(cell(&s, "A1"), CV::Empty);
+    // `trusted: false` or a non-boolean is not consent.
+    assert!(s.execute("vba.trust", json!({"trusted": "yes"})).is_err());
+    s.execute("vba.trust", json!({"trusted": false})).unwrap();
+    assert!(s.execute("vba.run", json!({"macro": "Mark"})).is_err());
+    s.execute("vba.trust", json!({})).unwrap();
+    run(&mut s, "Mark");
+    assert_eq!(cell(&s, "A1"), CV::Number(1.0));
+    // Or in the same call.
+    let mut s2 = Session::new();
+    s2.add_document(crate::DocState::new(made_here.doc().unwrap().wb.as_ref().clone(), None, "B.xlsm".into(), crate::Trust::FromFile));
+    s2.execute("vba.run", json!({"macro": "Mark", "trusted": true})).unwrap();
+    assert_eq!(cell(&s2, "A1"), CV::Number(1.0));
+}

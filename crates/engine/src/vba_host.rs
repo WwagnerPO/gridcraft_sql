@@ -1912,10 +1912,13 @@ pub fn run_macro_from(
     cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     caller: Option<String>,
 ) -> Result<V, VbaError> {
+    let uid = s.active().map(|d| d.uid).ok_or_else(|| err(91, "no workbook"))?;
+    if !macros_allowed(s, uid) {
+        return Err(err(MACROS_DISABLED, MACROS_DISABLED_TEXT));
+    }
     let proj = crate::cmd::vba::project(s).map_err(engine_err)?.ok_or_else(|| err(35, "This workbook has no macros"))?;
     let sources: Vec<(String, String)> = proj.modules.iter().map(|m| (m.name.clone(), m.source.clone())).collect();
     let program = gridcraft_vba::Program::parse(&sources)?;
-    let uid = s.active().map(|d| d.uid).ok_or_else(|| err(91, "no workbook"))?;
     let undo_before = s.active().map(|d| d.undo.len()).unwrap_or(0);
     let journal_before = s.journal.len();
     let result = on_macro_thread(|budget| {
@@ -1952,6 +1955,25 @@ pub fn run_macro_from(
             Err(e)
         }
         other => other,
+    }
+}
+
+/// The error a macro gets in a workbook whose macros aren't enabled.
+pub const MACROS_DISABLED: i32 = 1004;
+pub const MACROS_DISABLED_TEXT: &str = "Macros in this workbook are disabled. It came from a file: enable its content first (Enable Content, or vba.trust) if you trust where it came from.";
+
+/// Whether the macros of document `uid` may run: it was made in this session, or the user
+/// enabled them (Enable Content, `vba.trust`). A workbook opened from a file, or holding content
+/// pasted from one, starts with its macros disabled, as in Excel.
+pub fn macros_allowed(s: &Session, uid: u64) -> bool {
+    s.data.macros_trusted.contains(&uid) || s.documents().iter().find(|d| d.uid == uid).is_some_and(|d| d.trust.allows_code())
+}
+
+/// Enables (or disables again) the macros of document `uid` for this session.
+pub fn trust_macros(s: &mut Session, uid: u64, trusted: bool) {
+    s.data.macros_trusted.retain(|u| *u != uid);
+    if trusted {
+        s.data.macros_trusted.push(uid);
     }
 }
 

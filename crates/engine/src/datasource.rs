@@ -35,6 +35,9 @@ pub struct SessionData {
     credentials: Vec<(String, Credential)>,
     /// What each query last loaded, for Save to Database.
     pub(crate) snapshots: Vec<crate::cmd::dbwrite::Snapshot>,
+    /// Documents (uid) whose VBA macros the user enabled this session (Enable Content); see
+    /// [`crate::vba_host::macros_allowed`].
+    pub(crate) macros_trusted: Vec<u64>,
 }
 
 impl crate::Session {

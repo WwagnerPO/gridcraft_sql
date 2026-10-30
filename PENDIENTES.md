@@ -7,10 +7,6 @@ Actualizado: 2026-10-30.
 
 ## Integración con el oficial
 
-- [ ] **Macros y "Trust" del oficial.** El oficial añadió `Trust` en cada documento
-  (`engine/src/lib.rs`: `Local` / `FromFile`, `allows_code()`). Nuestras macros llevan su propio
-  "Habilitar contenido" en `ui-egui/src/ext.rs`. Unificarlos: que Habilitar contenido marque el
-  documento como de confianza y que `Workbook_Open` respete `allows_code()`.
 - [ ] **Colores de los iconos de base de datos.** El oficial pasó los iconos a la paleta del tema
   (`Palette`/`Cat`); `icons/database.rs` sigue con verde y azul fijos. Pasarlos a la paleta para el
   modo oscuro.
@@ -59,6 +55,11 @@ Actualizado: 2026-10-30.
 - Iniciar sesión con Microsoft Entra (cuentas de Azure): no se hará (2026-10-30).
 
 ## Hecho
+
+- [x] 2026-10-30: **macros y confianza**: las macros de un libro abierto de archivo no se ejecutan
+  por ninguna vía (Alt+F8, botones, CLI, MCP, canal de control) hasta Habilitar contenido o
+  `vba.trust` (antes `vba.run`/`vba.click` las ejecutaban sin preguntar). Usa el `Trust` del
+  oficial para saber si el libro viene de archivo. Documentado en `docs/macros.md`.
 
 - [x] 2026-10-30: **auditoría de calidad** de lo propio:
   - Macros: anidamiento profundo (paréntesis, `If`, `Not`) cerraba la app → "Expression too

@@ -56,7 +56,7 @@ pub fn click(app: &mut SheetApp, geo: &Geo, sh: &Sheet, p: Pos2) -> bool {
         return true;
     }
     let uid = app.session.active().map(|d| d.uid);
-    if uid.is_some_and(|u| !app.ext.macros_enabled.contains(&u)) {
+    if uid.is_some_and(|u| !gridcraft_engine::vba_host::macros_allowed(&app.session, u)) {
         let lang = app.ui.language;
         app.message = Some((
             "GridCraft".into(),

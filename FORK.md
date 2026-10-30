@@ -65,7 +65,7 @@ Casi todo vive en archivos **solo nuestros**, que el oficial no tiene y por tant
 | XLSX | `crates/xlsx/src/{connections,mashup,ovba,cfb_write,form_controls}.rs`, `crates/xlsx/src/cfb/streams.rs` |
 | Motor | `crates/engine/src/{datasource,vba_host}.rs`, `crates/engine/src/vba_host/objects.rs`, `crates/engine/src/cmd/{connections,dbwrite,vba}.rs` |
 | Interfaz | `crates/ui-egui/src/{ext,get_data,macros,controls}.rs`, `crates/ui-egui/src/{dialogs,ribbon,icons,i18n}/…` (`ext.rs`, `database.rs`) |
-| Docs | `docs/sql-server.md`, `PENDIENTES.md`, este archivo |
+| Docs | `docs/sql-server.md`, `docs/macros.md`, `PENDIENTES.md`, este archivo |
 
 En los archivos **compartidos** sólo hay líneas de enganche (cada una llama a código propio):
 

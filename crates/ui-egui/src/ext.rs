@@ -13,8 +13,6 @@ pub struct State {
     pub query_timers: Vec<(u64, String, f64)>,
     /// A VBA macro running on its worker (it holds the session meanwhile).
     pub macro_run: Option<macros::MacroRun>,
-    /// Workbooks (by uid) whose macros the user enabled.
-    pub macros_enabled: Vec<u64>,
 }
 
 /// Menu-style commands handled here; true when `id` was.
@@ -96,7 +94,7 @@ fn open_message(app: &mut SheetApp) {
 
 /// The status bar's macro state for workbook `uid`: its label and whether macros are on.
 pub fn macro_status(app: &SheetApp, uid: u64) -> (&'static str, bool) {
-    let on = app.ext.macros_enabled.contains(&uid);
+    let on = gridcraft_engine::vba_host::macros_allowed(&app.session, uid);
     (app.ui.language.tr(if on { "Macros enabled" } else { "Macros disabled" }), on)
 }
 

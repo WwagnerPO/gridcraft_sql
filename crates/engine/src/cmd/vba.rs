@@ -11,9 +11,18 @@ pub fn specs() -> Vec<CommandSpec> {
             "Run Macro",
             ["Developer", "Code", "Macros"],
             None,
-            "{macro: \"Module1.Main\" | \"Main\", answers?: [msgbox button codes], inputs?: [text]} runs a VBA macro of the workbook; its changes undo as one step → {result, messages, output}",
+            "{macro: \"Module1.Main\" | \"Main\", answers?: [msgbox button codes], inputs?: [text], trusted?: true (enables the workbook's macros first, see vba.trust)} runs a VBA macro of the workbook; its changes undo as one step → {result, messages, output}",
             has_doc,
             run
+        ),
+        cmd!(
+            noundo "vba.trust",
+            "Enable Content",
+            [],
+            None,
+            "{trusted?: true | false} enables (or disables again) the macros of the active workbook for this session; a workbook opened from a file starts with them disabled → {trusted}",
+            has_doc,
+            trust
         ),
         cmd!(
             query "vba.buttons",
@@ -29,7 +38,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Click Button",
             [],
             None,
-            "{button: \"Button 1\", sheet?, answers?, inputs?} runs the button's macro (Application.Caller is the button) → {result, messages, output}",
+            "{button: \"Button 1\", sheet?, answers?, inputs?, trusted?} runs the button's macro (Application.Caller is the button) → {result, messages, output}",
             has_doc,
             click
         ),
@@ -86,6 +95,7 @@ fn ui_from(p: &Json) -> crate::vba_host::Headless {
 }
 
 fn click(s: &mut Session, p: &Json) -> Result<Json> {
+    trust_from_call(s, p)?;
     let name = str_param(p, "button").ok_or_else(|| bad("vba.click", "missing `button`"))?.to_string();
     let (si, list) = sheet_buttons(s, p)?;
     let b = list.iter().find(|b| b.name.eq_ignore_ascii_case(&name)).ok_or_else(|| bad("vba.click", format!("no button named `{name}`")))?;
@@ -111,7 +121,29 @@ fn macros(s: &mut Session, _: &Json) -> Result<Json> {
     Ok(json!(names))
 }
 
+fn trust(s: &mut Session, p: &Json) -> Result<Json> {
+    // Only a missing `trusted` means "trust"; `"false"`, `0` or `null` are mistakes, not consent.
+    let trusted = match p.get("trusted") {
+        None => true,
+        Some(Json::Bool(b)) => *b,
+        Some(_) => return Err(bad("vba.trust", "`trusted` must be true or false")),
+    };
+    let uid = s.doc()?.uid;
+    crate::vba_host::trust_macros(s, uid, trusted);
+    Ok(json!({"trusted": trusted}))
+}
+
+/// `trusted: true` on a run call enables the workbook's macros first, as `vba.trust` does.
+fn trust_from_call(s: &mut Session, p: &Json) -> Result<()> {
+    if p.get("trusted") == Some(&Json::Bool(true)) {
+        let uid = s.doc()?.uid;
+        crate::vba_host::trust_macros(s, uid, true);
+    }
+    Ok(())
+}
+
 fn run(s: &mut Session, p: &Json) -> Result<Json> {
+    trust_from_call(s, p)?;
     let name = str_param(p, "macro").or_else(|| str_param(p, "name")).ok_or_else(|| bad("vba.run", "missing `macro`"))?.to_string();
     let mut ui = crate::vba_host::Headless::default();
     if let Some(a) = p.get("answers").and_then(Json::as_array) {
