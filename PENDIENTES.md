@@ -42,7 +42,13 @@ Actualizado: 2026-10-30.
 
 ## Calidad
 
-- [ ] `cargo audit` (vulnerabilidades conocidas) en cada actualización del oficial.
+- [ ] `cargo audit` en cada actualización del oficial. Estado 2026-10-30 (tras subir
+  `webpki-root-certs` a 1.0.11):
+  - `zip` 3.0.0 (RUSTSEC-2026-0367/0368/0369): fallos de `extract()` a disco; GridCraft solo lee
+    en memoria y no llama a `extract`, así que no nos afecta. La dependencia es del oficial
+    (`xlsx`, `cli`); se arregla cuando el oficial suba a `zip` ≥ 9.
+  - Avisos sin vulnerabilidad: `tokio` (`AsyncFd`, no lo usamos; llega por `tiberius`),
+    `rand` 0.7, `proc-macro-error`, `zbus_names`/`zvariant` (sin mantenimiento).
 - [ ] `cargo deny` (licencias: nada GPL) — no instalado aún.
 - [ ] Los 2 tests de UI que fallan sin fuentes (`interaction::column_autocomplete_folds_case_beyond_ascii`,
   `interaction::language_switch_renders_the_ribbon_and_persists`): pasar con `CRAFT_FONTS_DIR` en la
