@@ -32,8 +32,7 @@ Actualizado: 2026-10-30.
   `Workbook_BeforeClose`, `Workbook_NewSheet`… (ya funcionan `Workbook_Open`, `Worksheet_Change`
   y `Workbook_SheetChange`).
 - [ ] `Application.EnableEvents` (hoy los cambios de una macro nunca disparan eventos).
-- [ ] **Archivos de texto**: `Open … For … As #n`, `Print #`, `Write #`, `Input #`, `Line Input`,
-  `Close` (hoy: "GridCraft can't run yet").
+- [ ] Ficheros binarios y aleatorios (`For Binary`, `For Random`, `Get`, `Put`, `Seek`).
 - [ ] `GoSub` / `Return` y `AddressOf`.
 - [ ] **UserForms** (formularios de VBA).
 - [ ] **Editor de VBA**: ver y cambiar el código de las macros desde la app.
@@ -57,6 +56,9 @@ Actualizado: 2026-10-30.
 - Iniciar sesión con Microsoft Entra (cuentas de Azure): no se hará (2026-10-30).
 
 ## Hecho
+
+- [x] 2026-10-30: **ficheros de texto en macros**: `Open … For Input/Output/Append`, `Print #`,
+  `Write #`, `Input #`, `Line Input #`, `Close`, `Reset`, `EOF`, `LOF`, `FreeFile` (ANSI como VBA).
 
 - [x] 2026-10-30: **eventos VBA** `Worksheet_Change` y `Workbook_SheetChange` (en la app con
   cuadros de mensaje reales; en CLI/MCP al acabar el comando). Bugs encontrados por el camino:

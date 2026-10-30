@@ -28,6 +28,15 @@ connections. Enable content only for workbooks whose origin you trust.
   button).
 - A macro's changes undo as one step.
 
+## Text files
+
+`Open path For Input | Output | Append As #n` (with `FreeFile`), `Print #`, `Write #`, `Input #`,
+`Line Input #`, `Close`, `Reset`, `EOF` and `LOF` read and write text files as VBA does: `Print #`
+puts a space before and after numbers and moves to the next 14-column zone after a comma; `Write #`
+quotes strings and writes `#TRUE#`, `#NULL#`, `#2026-10-30#`. Files are written in ANSI
+(Windows-1252) with `\r\n` line ends; reading takes UTF-8 or UTF-16 when the file is, ANSI
+otherwise. A file opened for output is written when it is closed, or when the macro ends.
+
 ## Events
 
 When macros are enabled:
@@ -61,8 +70,8 @@ Message boxes answer their first button (or the next of `answers`), input boxes 
 ## Limits
 
 - Runs the source, not the compiled p-code; `Declare` (Windows API calls), `GoSub`, `AddressOf`,
-  UserForms and file statements (`Open … As #n`, `Print #`, `Line Input`…) aren't supported yet:
-  a macro using them stops with a message naming what it used.
+  UserForms, and binary or random files (`For Binary`, `For Random`, `Get`, `Put`, `Seek`) aren't
+  supported yet: a macro using them stops with a message naming what it used.
 - Other events (`Worksheet_SelectionChange`, `Worksheet_Activate`, `Workbook_BeforeSave`,
   `Workbook_BeforeClose`…) don't run yet.
 - Hostile code is stopped, never the app: nesting deeper than 128 levels is "Expression too
@@ -78,3 +87,4 @@ Message boxes answer their first button (or the next of `answers`), input boxes 
 |---|---|---|
 | 2026-10-30 | major | Created: security (Enable Content, `vba.trust`), commands, limits |
 | 2026-10-30 | minor | Events: `Worksheet_Change`, `Workbook_SheetChange`; sheet code names kept |
+| 2026-10-30 | minor | Text files: `Open`, `Print #`, `Write #`, `Input #`, `Line Input #`, `Close`, `EOF`, `LOF`, `FreeFile` |

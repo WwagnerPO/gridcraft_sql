@@ -1867,6 +1867,12 @@ impl Host for ExcelHost<'_> {
         Ok(self.ui.inputbox(prompt, title, default))
     }
 
+    fn read_text_file(&mut self, path: &str) -> Result<String, VbaError> {
+        objects::read_text(path)
+    }
+    fn write_text_file(&mut self, path: &str, text: &str, append: bool) -> Result<(), VbaError> {
+        objects::write_text(path, text, append)
+    }
     fn debug_print(&mut self, text: &str) {
         self.ui.debug_print(text);
     }

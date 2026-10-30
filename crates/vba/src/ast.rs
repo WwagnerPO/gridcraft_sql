@@ -152,7 +152,31 @@ pub enum Stmt {
     End,
     Stop,
     RaiseEvent(String, Vec<Arg>),
-    /// `Open … For … As #n`, `Print #n`, `Close`: not supported yet; reported when run.
+    /// `Open path For Input | Output | Append As #n`.
+    Open {
+        path: Expr,
+        mode: crate::files::FileMode,
+        number: Expr,
+    },
+    /// `Close #1, #2`; no numbers (or `Reset`): every open file.
+    Close(Vec<Expr>),
+    /// `Print #n, a; b, c`: each item with what follows it.
+    PrintFile {
+        number: Expr,
+        items: Vec<(Expr, crate::files::PrintSep)>,
+    },
+    /// `Write #n, a, b`.
+    WriteFile {
+        number: Expr,
+        items: Vec<Expr>,
+    },
+    /// `Input #n, a, b` (`line`: `Line Input #n, s`).
+    InputFile {
+        number: Expr,
+        targets: Vec<Expr>,
+        line: bool,
+    },
+    /// `Get`, `Put`, `Seek`, binary and random files: not supported yet; reported when run.
     Unsupported(String),
 }
 

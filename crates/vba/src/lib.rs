@@ -12,6 +12,7 @@
 pub mod ast;
 pub mod builtins;
 pub mod error;
+pub mod files;
 pub mod interp;
 pub mod lexer;
 pub mod parser;

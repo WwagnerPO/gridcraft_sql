@@ -429,3 +429,55 @@ fn events_wait_for_enabled_macros_and_for_the_app() {
     assert_eq!(cell(&s, "Z1"), CV::Number(1.0));
     assert!(events::take_pending(&mut s).is_empty(), "the handler's change raised nothing");
 }
+
+#[test]
+fn macros_write_and_read_text_files() {
+    let dir = std::env::temp_dir().join(format!("gridcraft-vba-files-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("datos.csv");
+    let p = path.to_string_lossy().replace('"', "");
+    let code = format!(
+        "Attribute VB_Name = \"Module1\"\r\n\
+Sub Escribir()\r\n\
+    Dim f As Integer\r\n\
+    f = FreeFile\r\n\
+    Open \"{p}\" For Output As #f\r\n\
+    Write #f, \"Año\", \"Importe\"\r\n\
+    Write #f, \"España, sur\", 12.5\r\n\
+    Close #f\r\n\
+    Open \"{p}\" For Append As #1\r\n\
+    Print #1, \"total\"; 3\r\n\
+    Close\r\n\
+End Sub\r\n\
+Sub Leer()\r\n\
+    Dim a, b, n, linea\r\n\
+    Open \"{p}\" For Input As #2\r\n\
+    Input #2, a, b\r\n\
+    Range(\"A1\").Value = a\r\n\
+    Input #2, a, b\r\n\
+    Range(\"A2\").Value = a\r\n\
+    Range(\"B2\").Value = b * 2\r\n\
+    Line Input #2, linea\r\n\
+    Range(\"A3\").Value = linea\r\n\
+    Range(\"A4\").Value = EOF(2)\r\n\
+    Close #2\r\n\
+End Sub\r\n"
+    );
+    let mut s = session(&code);
+    run(&mut s, "Escribir");
+    let bytes = std::fs::read(&path).unwrap();
+    // ANSI, as VBA writes: ñ is one byte.
+    assert_eq!(bytes, b"\"A\xf1o\",\"Importe\"\r\n\"Espa\xf1a, sur\",12.5\r\ntotal 3 \r\n");
+    run(&mut s, "Leer");
+    assert_eq!(cell(&s, "A1"), CV::text("Año"));
+    assert_eq!(cell(&s, "A2"), CV::text("España, sur"));
+    assert_eq!(cell(&s, "B2"), CV::Number(25.0));
+    assert_eq!(cell(&s, "A3"), CV::text("total 3 "));
+    assert_eq!(cell(&s, "A4"), CV::Bool(true));
+    // Reading a file that isn't there is error 53.
+    let mut s = session(&format!("Attribute VB_Name = \"Module1\"\r\nSub T()\r\n Open \"{p}.no\" For Input As #1\r\nEnd Sub\r\n"));
+    let e = s.execute("vba.run", json!({"macro": "T"})).unwrap_err().to_string();
+    assert!(e.contains("53") || e.contains("not found"), "{e}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -343,6 +343,65 @@ fn write_file(_: &str, _: &[u8], _: bool) -> Result<(), VbaError> {
     Err(err(75, "Files can't be written from the web version"))
 }
 
+/// Larger text files aren't opened for input.
+const MAX_TEXT_FILE: u64 = 64 << 20;
+
+/// What `Open … For Input` reads: UTF-8 (with or without its byte-order mark) or UTF-16 when the
+/// file says so, else ANSI (Windows-1252), as VBA reads files.
+pub(super) fn decode_text(bytes: &[u8]) -> String {
+    if let Some(rest) = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]) {
+        return String::from_utf8_lossy(rest).into_owned();
+    }
+    if let Some(rest) = bytes.strip_prefix(&[0xFF, 0xFE]) {
+        let units: Vec<u16> = rest.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        return String::from_utf16_lossy(&units);
+    }
+    match std::str::from_utf8(bytes) {
+        Ok(s) => s.to_string(),
+        Err(_) => gridcraft_xlsx::ovba::decode(bytes, 1252),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn read_text(path: &str) -> Result<String, VbaError> {
+    use std::io::Read as _;
+    let f = std::fs::File::open(path).map_err(|e| io_err(e, path))?;
+    let meta = f.metadata().map_err(|e| io_err(e, path))?;
+    if !meta.is_file() {
+        return Err(err(75, format!("Path/File access error: {path}")));
+    }
+    let mut bytes = vec![];
+    (&f).take(MAX_TEXT_FILE + 1).read_to_end(&mut bytes).map_err(|e| io_err(e, path))?;
+    if bytes.len() as u64 > MAX_TEXT_FILE {
+        return Err(err(7, format!("Out of memory: {path} is too large")));
+    }
+    Ok(decode_text(&bytes))
+}
+
+/// Writes what `Print #`/`Write #` wrote to a file, in ANSI (Windows-1252) as VBA does.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn write_text(path: &str, text: &str, append: bool) -> Result<(), VbaError> {
+    use std::io::Write as _;
+    let mut o = std::fs::OpenOptions::new();
+    if append {
+        o.append(true).create(true);
+    } else {
+        o.write(true).create(true).truncate(true);
+    }
+    let mut f = o.open(path).map_err(|e| io_err(e, path))?;
+    f.write_all(&gridcraft_xlsx::ovba::encode(text, 1252)).map_err(|e| io_err(e, path))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(super) fn read_text(_: &str) -> Result<String, VbaError> {
+    Err(err(75, "Files can't be read from the web version"))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(super) fn write_text(_: &str, _: &str, _: bool) -> Result<(), VbaError> {
+    Err(err(75, "Files can't be written from the web version"))
+}
+
 /// `Dir(pattern)`: the first file name matching it (`*` and `?` in the name part), or "".
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) fn dir(pattern: &str) -> Result<V, VbaError> {

@@ -682,6 +682,9 @@ impl Parser {
             let args = if self.eat_op("(") { self.call_args(")")? } else { vec![] };
             return Ok(Stmt::RaiseEvent(n, args));
         }
+        if let Some(s) = self.file_statement()? {
+            return Ok(s);
+        }
         for w in [
             "Open",
             "Close",
@@ -750,6 +753,100 @@ impl Parser {
 
     fn end_of_statement_at(&self, k: usize) -> bool {
         matches!(self.peek_at(k), Tok::Newline | Tok::Colon) || self.i + k >= self.t.len() || kw(self.peek_at(k), "Else")
+    }
+
+    /// `#n` (the `#` is optional) in a file statement.
+    fn file_number(&mut self) -> Result<Expr, VbaError> {
+        self.eat_op("#");
+        self.expr()
+    }
+
+    /// The sequential-file statements (`Open … For Input/Output/Append`, `Print #`, `Write #`,
+    /// `Input #`, `Line Input #`, `Close`, `Reset`). `None` for anything else (binary and random
+    /// files fall through to "not supported").
+    fn file_statement(&mut self) -> Result<Option<Stmt>, VbaError> {
+        use crate::files::{FileMode, PrintSep};
+        let hash_next = matches!(self.peek_at(1), Tok::Op("#"));
+        if self.is_kw("Open") {
+            let save = self.i;
+            self.i += 1;
+            let path = self.expr()?;
+            self.expect_kw("For")?;
+            let mode = if self.eat_kw("Input") {
+                FileMode::Input
+            } else if self.eat_kw("Output") {
+                FileMode::Output
+            } else if self.eat_kw("Append") {
+                FileMode::Append
+            } else {
+                self.i = save;
+                return Ok(None);
+            };
+            // `Access Read`, `Shared`, `Lock Write`…: no effect here.
+            while !self.end_of_statement() && !self.is_kw("As") {
+                self.bump();
+            }
+            self.expect_kw("As")?;
+            let number = self.file_number()?;
+            if self.eat_kw("Len") {
+                self.expect_op("=")?;
+                self.expr()?;
+            }
+            return Ok(Some(Stmt::Open { path, mode, number }));
+        }
+        if self.is_kw("Close") || self.is_kw("Reset") {
+            let reset = self.is_kw("Reset");
+            self.i += 1;
+            let mut numbers = vec![];
+            while !reset && !self.end_of_statement() {
+                numbers.push(self.file_number()?);
+                if !self.eat_op(",") {
+                    break;
+                }
+            }
+            return Ok(Some(Stmt::Close(numbers)));
+        }
+        if (self.is_kw("Print") || self.is_kw("Write")) && hash_next {
+            let write = self.is_kw("Write");
+            self.i += 1;
+            let number = self.file_number()?;
+            let mut items: Vec<(Expr, PrintSep)> = vec![];
+            if self.eat_op(",") {
+                while !self.end_of_statement() {
+                    if self.eat_op(";") || self.eat_op(",") {
+                        // A separator with no item before it (`Print #1, , x`): an empty item.
+                        items.push((Expr::Lit(Tok::Str(String::new())), PrintSep::Comma));
+                        continue;
+                    }
+                    let e = self.expr()?;
+                    let sep = if self.eat_op(";") {
+                        PrintSep::Semicolon
+                    } else if self.eat_op(",") {
+                        PrintSep::Comma
+                    } else {
+                        PrintSep::End
+                    };
+                    items.push((e, sep));
+                }
+            }
+            return Ok(Some(if write {
+                Stmt::WriteFile { number, items: items.into_iter().map(|(e, _)| e).collect() }
+            } else {
+                Stmt::PrintFile { number, items }
+            }));
+        }
+        let line = self.is_kw("Line") && kw(self.peek_at(1), "Input") && matches!(self.peek_at(2), Tok::Op("#"));
+        if line || (self.is_kw("Input") && hash_next) {
+            self.i += if line { 2 } else { 1 };
+            let number = self.file_number()?;
+            self.expect_op(",")?;
+            let mut targets = vec![self.expr()?];
+            while !line && self.eat_op(",") {
+                targets.push(self.expr()?);
+            }
+            return Ok(Some(Stmt::InputFile { number, targets, line }));
+        }
+        Ok(None)
     }
 
     fn label_name(&mut self) -> Result<String, VbaError> {

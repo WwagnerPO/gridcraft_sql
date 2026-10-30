@@ -63,6 +63,15 @@ pub trait Host {
     }
     /// `Debug.Print` output.
     fn debug_print(&mut self, _text: &str) {}
+    /// The text of a file a macro opens for input (`Open … For Input`).
+    fn read_text_file(&mut self, _path: &str) -> Result<String, VbaError> {
+        Err(err(75, "Path/File access error"))
+    }
+    /// Writes a file a macro closes (`Open … For Output | Append`): the whole text, or added to
+    /// the end with `append`.
+    fn write_text_file(&mut self, _path: &str, _text: &str, _append: bool) -> Result<(), VbaError> {
+        Err(err(75, "Path/File access error"))
+    }
 }
 
 /// A class-module instance (`New Thing`).
@@ -174,6 +183,8 @@ pub struct Interp<'h> {
     err_cleared: bool,
     /// Set from another thread to stop the macro (the Stop button).
     cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    /// Files opened with `Open`.
+    files: crate::files::Files,
 }
 
 impl<'h> Interp<'h> {
@@ -195,6 +206,7 @@ impl<'h> Interp<'h> {
             last_error: None,
             err_cleared: true,
             cancel: None,
+            files: crate::files::Files::default(),
         };
         it.load_module_level();
         it
@@ -297,7 +309,28 @@ impl<'h> Interp<'h> {
         };
         let (mi, pi) = self.program.find_proc(&proc, module).ok_or_else(|| err(35, format!("Sub or Function not defined: {name}")))?;
         let slots: Vec<Slot> = args.into_iter().map(|v| Rc::new(RefCell::new(v))).collect();
-        self.call_proc(mi, pi, slots, false)
+        let r = self.call_proc(mi, pi, slots, false);
+        // Files left open are closed (and written) when the macro ends, as VBA does on `End`.
+        let closed = self.close_files(&[]);
+        let r = r?;
+        closed?;
+        Ok(r)
+    }
+
+    /// Closes files `numbers` (every open file when empty), writing those opened for output.
+    fn close_files(&mut self, numbers: &[i64]) -> Result<(), VbaError> {
+        let numbers = if numbers.is_empty() { self.files.numbers() } else { numbers.to_vec() };
+        let mut first_error = None;
+        for n in numbers {
+            let r = self.files.close(n).and_then(|w| match w {
+                Some((path, text, append)) => self.host.write_text_file(&path, &text, append),
+                None => Ok(()),
+            });
+            if let Err(e) = r {
+                first_error.get_or_insert(e);
+            }
+        }
+        first_error.map_or(Ok(()), Err)
     }
 
     /// The names of the runnable macros (public Subs with no required arguments).
@@ -629,6 +662,62 @@ impl<'h> Interp<'h> {
             Stmt::End => Ok(Flow::End),
             Stmt::Stop => Ok(Flow::Normal),
             Stmt::RaiseEvent(..) => Ok(Flow::Normal),
+            Stmt::Open { path, mode, number } => {
+                let path = self.eval_value(path, scope)?.to_str()?;
+                let n = crate::files::number(&self.eval_value(number, scope)?)?;
+                if self.files.is_open(n) {
+                    return Err(err(55, "File already open"));
+                }
+                let text = match mode {
+                    crate::files::FileMode::Input => {
+                        let t = self.host.read_text_file(&path)?;
+                        value::check_length(t.len())?;
+                        Some(t)
+                    }
+                    // Output starts the file empty now, as VBA does.
+                    crate::files::FileMode::Output => {
+                        self.host.write_text_file(&path, "", false)?;
+                        None
+                    }
+                    crate::files::FileMode::Append => None,
+                };
+                self.files.open(n, &path, *mode, text)?;
+                Ok(Flow::Normal)
+            }
+            Stmt::Close(numbers) => {
+                let mut ns = vec![];
+                for e in numbers {
+                    ns.push(crate::files::number(&self.eval_value(e, scope)?)?);
+                }
+                self.close_files(&ns)?;
+                Ok(Flow::Normal)
+            }
+            Stmt::PrintFile { number, items } => {
+                let n = crate::files::number(&self.eval_value(number, scope)?)?;
+                let mut values = Vec::with_capacity(items.len());
+                for (e, sep) in items {
+                    values.push((self.eval_value(e, scope)?, *sep));
+                }
+                self.files.print(n, &values)?;
+                Ok(Flow::Normal)
+            }
+            Stmt::WriteFile { number, items } => {
+                let n = crate::files::number(&self.eval_value(number, scope)?)?;
+                let mut values = Vec::with_capacity(items.len());
+                for e in items {
+                    values.push(self.eval_value(e, scope)?);
+                }
+                self.files.write(n, &values)?;
+                Ok(Flow::Normal)
+            }
+            Stmt::InputFile { number, targets, line } => {
+                let n = crate::files::number(&self.eval_value(number, scope)?)?;
+                for t in targets {
+                    let v = if *line { Value::str(self.files.line_input(n)?) } else { self.files.input_field(n)? };
+                    self.assign(t, v, scope, false)?;
+                }
+                Ok(Flow::Normal)
+            }
             Stmt::Unsupported(what) => Err(err(5, format!("The macro uses `{what}`, which GridCraft can't run yet"))),
         }
         .map_err(|mut e| {
@@ -976,6 +1065,9 @@ impl<'h> Interp<'h> {
                 return self.host.create_object(&class).map(|o| o.or(Some(Value::Nothing)));
             }
             "DOEVENTS" => return Ok(Some(Value::Integer(0))),
+            "EOF" => return Ok(Some(Value::Bool(self.files.eof(crate::files::number(&arg0(args))?)?))),
+            "LOF" => return Ok(Some(Value::from_i64(self.files.lof(crate::files::number(&arg0(args))?)?))),
+            "FREEFILE" => return Ok(Some(Value::from_i64(self.files.free()?))),
             "ARRAY" => return Ok(Some(builtins::array_1d(args.to_vec()))),
             _ => {}
         }
@@ -1553,6 +1645,11 @@ fn copy_overlap(old: &value::Array, new: &mut value::Array) {
             idx[d] = old.bounds[d].0;
         }
     }
+}
+
+/// The first argument, or Empty.
+fn arg0(args: &[Value]) -> Value {
+    args.first().cloned().unwrap_or_default()
 }
 
 /// The head of a `For var = from To to [Step step]` loop.
