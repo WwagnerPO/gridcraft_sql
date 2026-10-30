@@ -13,6 +13,8 @@ pub struct State {
     pub query_timers: Vec<(u64, String, f64)>,
     /// A VBA macro running on its worker (it holds the session meanwhile).
     pub macro_run: Option<macros::MacroRun>,
+    /// VBA events waiting for the macro worker, oldest first.
+    pub events: Vec<gridcraft_engine::vba_host::events::PendingEvent>,
 }
 
 /// Menu-style commands handled here; true when `id` was.
@@ -70,6 +72,7 @@ pub fn frame(app: &mut SheetApp, ui: &mut egui::Ui) -> bool {
     }
     macro_notice(app);
     open_message(app);
+    macros::next_event(app);
     get_data::tick(app, &ui.ctx().clone());
     false
 }

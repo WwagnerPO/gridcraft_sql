@@ -38,6 +38,11 @@ pub struct SessionData {
     /// Documents (uid) whose VBA macros the user enabled this session (Enable Content); see
     /// [`crate::vba_host::macros_allowed`].
     pub(crate) macros_trusted: Vec<u64>,
+    /// A macro is running: the changes it makes raise no events.
+    pub(crate) in_macro: bool,
+    /// The app runs events itself (see [`crate::vba_host::events`]).
+    pub(crate) events_deferred: bool,
+    pub(crate) pending_events: Vec<crate::vba_host::events::PendingEvent>,
 }
 
 impl crate::Session {

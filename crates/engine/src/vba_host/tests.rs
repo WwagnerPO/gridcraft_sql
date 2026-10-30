@@ -375,3 +375,57 @@ fn macros_from_a_file_run_only_once_enabled() {
     s2.execute("vba.run", json!({"macro": "Mark", "trusted": true})).unwrap();
     assert_eq!(cell(&s2, "A1"), CV::Number(1.0));
 }
+
+/// A workbook whose first sheet (code name Hoja1) has `sheet_code`, plus `EsteLibro` with
+/// `book_code`, as a Spanish Excel lays them out.
+fn session_with_events(sheet_code: &str, book_code: &str) -> Session {
+    let mut s = Session::new();
+    s.execute("file.new", json!({})).unwrap();
+    let bin = gridcraft_xlsx::ovba::tests_support::sample_project(&[
+        ("Module1", true, "Attribute VB_Name = \"Module1\"\r\n"),
+        ("Hoja1", false, sheet_code),
+        ("EsteLibro", false, book_code),
+    ]);
+    let wb = std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().wb);
+    wb.vba_project = Some(std::sync::Arc::new(bin));
+    std::sync::Arc::make_mut(&mut wb.sheets[0]).code_name = Some("Hoja1".into());
+    s
+}
+
+#[test]
+fn worksheet_change_runs_when_cells_change() {
+    let mut s = session_with_events(
+        "Attribute VB_Name = \"Hoja1\"\r\nPrivate Sub Worksheet_Change(ByVal Target As Range)\r\n    Range(\"Z1\").Value = Target.Address\r\n    Range(\"Z2\").Value = Range(\"Z2\").Value + 1\r\nEnd Sub\r\n",
+        "Attribute VB_Name = \"EsteLibro\"\r\nPrivate Sub Workbook_SheetChange(ByVal Sh As Object, ByVal Target As Range)\r\n    Range(\"Y1\").Value = Sh.Name & \"!\" & Target.Address\r\nEnd Sub\r\n",
+    );
+    s.execute("cell.set", json!({"cell": "B2", "input": "5"})).unwrap();
+    assert_eq!(cell(&s, "Z1"), CV::text("$B$2"));
+    // The handler's own writes raise no event: it ran once.
+    assert_eq!(cell(&s, "Z2"), CV::Number(1.0));
+    assert_eq!(cell(&s, "Y1"), CV::text("Sheet1!$B$2"));
+    s.execute("range.setValues", json!({"range": "C3", "values": [[1, 2], [3, 4]]})).unwrap();
+    assert_eq!(cell(&s, "Z1"), CV::text("$C$3:$D$4"));
+    assert_eq!(cell(&s, "Z2"), CV::Number(2.0));
+}
+
+#[test]
+fn events_wait_for_enabled_macros_and_for_the_app() {
+    let code = "Attribute VB_Name = \"Hoja1\"\r\nPrivate Sub Worksheet_Change(ByVal Target As Range)\r\n    Range(\"Z1\").Value = 1\r\nEnd Sub\r\n";
+    let made = session_with_events(code, "Attribute VB_Name = \"EsteLibro\"\r\n");
+    // From a file, macros disabled: no event.
+    let mut s = Session::new();
+    s.add_document(crate::DocState::new(made.doc().unwrap().wb.as_ref().clone(), None, "B.xlsm".into(), crate::Trust::FromFile));
+    s.execute("cell.set", json!({"cell": "A1", "input": "x"})).unwrap();
+    assert_eq!(cell(&s, "Z1"), CV::Empty);
+    // The app runs them itself: they wait.
+    s.execute("vba.trust", json!({})).unwrap();
+    events::set_deferred(&mut s, true);
+    s.execute("cell.set", json!({"cell": "A1", "input": "y"})).unwrap();
+    assert_eq!(cell(&s, "Z1"), CV::Empty);
+    let pending = events::take_pending(&mut s);
+    assert_eq!(pending.len(), 1);
+    assert_eq!((pending[0].proc.as_str(), pending[0].target.a1()), ("Hoja1.Worksheet_Change", "A1".to_string()));
+    run_event_from(&mut s, &pending[0], &mut Headless::default(), None).unwrap();
+    assert_eq!(cell(&s, "Z1"), CV::Number(1.0));
+    assert!(events::take_pending(&mut s).is_empty(), "the handler's change raised nothing");
+}

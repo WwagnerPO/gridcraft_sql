@@ -210,3 +210,40 @@ fn clicking_a_form_button_runs_its_macro() {
     }
     assert_eq!(cell(&h, "A1"), Value::text("Button 1"), "Application.Caller is the button");
 }
+
+#[test]
+fn editing_a_cell_runs_worksheet_change_with_a_real_message_box() {
+    let mut h = harness(&[
+        ("Module1", true, "Attribute VB_Name = \"Module1\"\r\n"),
+        (
+            "Hoja1",
+            false,
+            "Attribute VB_Name = \"Hoja1\"\r\nPrivate Sub Worksheet_Change(ByVal Target As Range)\r\n    If MsgBox(\"¿Guardar \" & Target.Address & \"?\", vbYesNo) = vbYes Then Range(\"Z1\").Value = Target.Value\r\nEnd Sub\r\n",
+        ),
+    ]);
+    {
+        let s = &mut h.state_mut().session;
+        let wb = std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().wb);
+        std::sync::Arc::make_mut(&mut wb.sheets[0]).code_name = Some("Hoja1".into());
+    }
+    // Disabled: editing raises nothing.
+    h.state_mut().run("cell.set", json!({"cell": "B2", "input": "7"})).unwrap();
+    h.run_steps(3);
+    assert!(h.state().ext.macro_run.is_none());
+    enable(&mut h);
+    h.state_mut().run("cell.set", json!({"cell": "B2", "input": "8"})).unwrap();
+    h.run_steps(2);
+    wait(&mut h);
+    h.run_steps(2);
+    assert!(h.query_by_label_contains("$B$2").is_some(), "the handler's message box shows");
+    h.get_by_label("Yes").click();
+    for _ in 0..400 {
+        h.run_steps(1);
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        if h.state().ext.macro_run.is_none() {
+            break;
+        }
+    }
+    assert_eq!(cell(&h, "Z1"), Value::Number(8.0));
+    assert!(h.state().message.is_none(), "{:?}", h.state().message);
+}

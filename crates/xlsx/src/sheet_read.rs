@@ -142,6 +142,7 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
     for e in &root.children {
         match e.name.as_str() {
             "sheetPr" => {
+                sheet.code_name = e.attr("codeName").map(str::trim).filter(|n| !n.is_empty() && n.len() <= 31).map(str::to_string);
                 if let Some(t) = e.child("tabColor") {
                     sheet.tab_color = Some(read_color(t, &cx.palette));
                 }

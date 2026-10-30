@@ -1912,6 +1912,32 @@ pub fn run_macro_from(
     cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     caller: Option<String>,
 ) -> Result<V, VbaError> {
+    run_entry(s, name, ui, cancel, caller, None)
+}
+
+/// Runs an event handler (see [`events`]) with the changed cells as `Target` (and their sheet
+/// as `Sh` for `Workbook_SheetChange`), on the document the change happened in.
+pub fn run_event_from(
+    s: &mut Session,
+    ev: &events::PendingEvent,
+    ui: &mut dyn MacroUi,
+    cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) -> Result<V, VbaError> {
+    let i = s.documents().iter().position(|d| d.uid == ev.uid).ok_or_else(|| err(91, "The workbook was closed"))?;
+    if s.active().map(|d| d.uid) != Some(ev.uid) {
+        s.set_active(i);
+    }
+    run_entry(s, &ev.proc, ui, cancel, None, Some(ev))
+}
+
+fn run_entry(
+    s: &mut Session,
+    name: &str,
+    ui: &mut dyn MacroUi,
+    cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    caller: Option<String>,
+    event: Option<&events::PendingEvent>,
+) -> Result<V, VbaError> {
     let uid = s.active().map(|d| d.uid).ok_or_else(|| err(91, "no workbook"))?;
     if !macros_allowed(s, uid) {
         return Err(err(MACROS_DISABLED, MACROS_DISABLED_TEXT));
@@ -1921,6 +1947,8 @@ pub fn run_macro_from(
     let program = gridcraft_vba::Program::parse(&sources)?;
     let undo_before = s.active().map(|d| d.undo.len()).unwrap_or(0);
     let journal_before = s.journal.len();
+    // What the macro changes raises no events.
+    let was_in_macro = std::mem::replace(&mut s.data.in_macro, true);
     let result = on_macro_thread(|budget| {
         let mut host = ExcelHost::new(s, ui);
         host.caller = caller;
@@ -1931,10 +1959,18 @@ pub fn run_macro_from(
         if let Some(c) = cancel {
             interp.set_cancel(c);
         }
+        let args = match event {
+            Some(ev) => {
+                let target = range_value(&Rng { uid, sheet: ev.sheet.clone(), kind: 'c', areas: vec![ev.target] });
+                if ev.with_sheet { vec![self::host("Worksheet", format!("{uid}{SEP}{}", ev.sheet)), target] } else { vec![target] }
+            }
+            None => vec![],
+        };
         // A value can't leave the macro's thread (it may hold references): its text does.
-        interp.run(name, vec![]).map(|v| v.to_str().unwrap_or_default())
+        interp.run(name, args).map(|v| v.to_str().unwrap_or_default())
     })
     .map(V::str);
+    s.data.in_macro = was_in_macro;
     // One undo step for the whole macro: keep the state from before it, drop the rest.
     if let Some(d) = s.docs.iter_mut().find(|d| d.uid == uid)
         && d.undo.len() > undo_before + 1
@@ -2000,6 +2036,7 @@ fn on_macro_thread(run: impl FnOnce(Option<usize>) -> Result<String, VbaError> +
     })
 }
 
+pub mod events;
 mod objects;
 
 #[cfg(test)]

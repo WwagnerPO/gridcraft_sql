@@ -766,6 +766,9 @@ impl Session {
         } else if let Some(uid) = doc_uid {
             self.bound_tail(uid);
         }
+        if self.depth == 0 && result.is_ok() {
+            vba_host::events::after_command(self);
+        }
         result
     }
 

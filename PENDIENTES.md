@@ -28,8 +28,10 @@ Actualizado: 2026-10-30.
 
 ## Macros VBA
 
-- [ ] **Eventos**: solo funciona `Workbook_Open`. Faltan `Worksheet_Change`,
-  `Worksheet_SelectionChange`, `Workbook_BeforeSave`, `Workbook_BeforeClose`, etc.
+- [ ] **Más eventos**: `Worksheet_SelectionChange`, `Worksheet_Activate`, `Workbook_BeforeSave`,
+  `Workbook_BeforeClose`, `Workbook_NewSheet`… (ya funcionan `Workbook_Open`, `Worksheet_Change`
+  y `Workbook_SheetChange`).
+- [ ] `Application.EnableEvents` (hoy los cambios de una macro nunca disparan eventos).
 - [ ] **Archivos de texto**: `Open … For … As #n`, `Print #`, `Write #`, `Input #`, `Line Input`,
   `Close` (hoy: "GridCraft can't run yet").
 - [ ] `GoSub` / `Return` y `AddressOf`.
@@ -55,6 +57,13 @@ Actualizado: 2026-10-30.
 - Iniciar sesión con Microsoft Entra (cuentas de Azure): no se hará (2026-10-30).
 
 ## Hecho
+
+- [x] 2026-10-30: **eventos VBA** `Worksheet_Change` y `Workbook_SheetChange` (en la app con
+  cuadros de mensaje reales; en CLI/MCP al acabar el comando). Bugs encontrados por el camino:
+  - Al guardar se perdía el `codeName` de cada hoja (lo que une la hoja con su código VBA en
+    Excel) → se lee y se guarda; una hoja copiada con nombre repetido lo deja para Excel.
+  - `Workbook_Open` solo se buscaba en `ThisWorkbook`: en libros de Excel en español
+    (`EsteLibro`) no se ejecutaba → se busca en el módulo del libro sea cual sea su nombre.
 
 - [x] 2026-10-30: **macros y confianza**: las macros de un libro abierto de archivo no se ejecutan
   por ninguna vía (Alt+F8, botones, CLI, MCP, canal de control) hasta Habilitar contenido o

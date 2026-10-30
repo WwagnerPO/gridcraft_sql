@@ -369,6 +369,7 @@ pub(crate) fn commit<R>(d: &mut DocState, f: impl FnOnce(&mut Ctx) -> Result<R>)
     let mut ctx = Ctx { wb: (*d.wb).clone(), changed: Vec::new(), structural: false, sel: &mut sel, fit_rows: Vec::new(), protection_checked: false };
     let r = f(&mut ctx)?;
     let Ctx { mut wb, changed, structural, mut fit_rows, protection_checked, .. } = ctx;
+    crate::vba_host::events::note_changed(d, &changed);
     if !protection_checked {
         check_protection(&d.wb, &wb, &d.unlocked_ranges)?;
     }

@@ -28,6 +28,23 @@ connections. Enable content only for workbooks whose origin you trust.
   button).
 - A macro's changes undo as one step.
 
+## Events
+
+When macros are enabled:
+
+- `Workbook_Open` (or `Auto_Open`) runs on Enable Content.
+- `Worksheet_Change(ByVal Target As Range)` in a sheet's code module runs when cells of that sheet
+  change (typing, paste, fill, commands…), with `Target` the changed cells (their bounding range
+  when several areas changed).
+- `Workbook_SheetChange(ByVal Sh As Object, ByVal Target As Range)` in the workbook's module runs
+  for a change on any sheet.
+
+The modules are found by the sheet's code name (`Hoja1`, `Sheet1`…, kept with the file) and the
+workbook module whatever its language (`ThisWorkbook`, `EsteLibro`…). In the app an event runs
+like a macro, with real message boxes; from the CLI, MCP or the control channel it runs at the end
+of the command, message boxes answering their first button. Changes a macro makes raise no events
+(as with `Application.EnableEvents = False` in Excel), so a handler that writes cells can't loop.
+
 ## Commands (CLI, MCP, control channel)
 
 | Command | Params |
@@ -46,7 +63,8 @@ Message boxes answer their first button (or the next of `answers`), input boxes 
 - Runs the source, not the compiled p-code; `Declare` (Windows API calls), `GoSub`, `AddressOf`,
   UserForms and file statements (`Open … As #n`, `Print #`, `Line Input`…) aren't supported yet:
   a macro using them stops with a message naming what it used.
-- Only `Workbook_Open` / `Auto_Open` run as events.
+- Other events (`Worksheet_SelectionChange`, `Worksheet_Activate`, `Workbook_BeforeSave`,
+  `Workbook_BeforeClose`…) don't run yet.
 - Hostile code is stopped, never the app: nesting deeper than 128 levels is "Expression too
   complex", runaway recursion "Out of stack space", strings past 64M characters and arrays past
   16M elements "Out of memory", and a run of more than 500 million steps is stopped.
@@ -59,3 +77,4 @@ Message boxes answer their first button (or the next of `answers`), input boxes 
 | Date | Change | Summary |
 |---|---|---|
 | 2026-10-30 | major | Created: security (Enable Content, `vba.trust`), commands, limits |
+| 2026-10-30 | minor | Events: `Worksheet_Change`, `Workbook_SheetChange`; sheet code names kept |

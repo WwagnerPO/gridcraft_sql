@@ -13,6 +13,7 @@ use std::sync::mpsc;
 use egui::{Color32, RichText, Ui, vec2};
 use gridcraft_engine::Session;
 use gridcraft_engine::vba_host::MacroUi;
+use gridcraft_engine::vba_host::events::PendingEvent;
 use serde_json::{Value as Json, json};
 
 use crate::SheetApp;
@@ -63,6 +64,8 @@ type Outcome = (Session, Result<String, String>);
 /// A macro running on its worker.
 pub struct MacroRun {
     pub name: String,
+    /// An event handler: it finishes without a toast (errors still show).
+    quiet: bool,
     rx: mpsc::Receiver<Event>,
     handle: Option<std::thread::JoinHandle<Outcome>>,
     ask: Option<Ask>,
@@ -77,6 +80,22 @@ pub fn start(app: &mut SheetApp, name: &str) {
     start_from(app, name, None);
 }
 
+/// What the macro worker runs.
+enum Job {
+    Macro { name: String, caller: Option<String> },
+    Event(PendingEvent),
+}
+
+impl Job {
+    fn run(&self, session: &mut Session, ui: &mut dyn MacroUi, cancel: Option<Arc<AtomicBool>>) -> Result<String, String> {
+        let r = match self {
+            Job::Macro { name, caller } => gridcraft_engine::vba_host::run_macro_from(session, name, ui, cancel, caller.clone()),
+            Job::Event(ev) => gridcraft_engine::vba_host::run_event_from(session, ev, ui, cancel),
+        };
+        r.map(|v| v.to_str().unwrap_or_default()).map_err(|e| e.to_string())
+    }
+}
+
 /// Starts macro `name`, run by the button `caller` (`Application.Caller`) when given.
 pub fn start_from(app: &mut SheetApp, name: &str, caller: Option<String>) {
     if app.ext.macro_run.is_some() {
@@ -85,11 +104,33 @@ pub fn start_from(app: &mut SheetApp, name: &str, caller: Option<String>) {
     if !app.commit_edit(0, 0, false, false) {
         return;
     }
+    run_job(app, name, Job::Macro { name: name.to_string(), caller }, false);
+}
+
+/// Runs the next VBA event the engine queued (`Worksheet_Change`…), once no macro runs and no
+/// cell is being edited.
+pub fn next_event(app: &mut SheetApp) {
+    if app.ext.macro_run.is_some() {
+        return;
+    }
+    gridcraft_engine::vba_host::events::set_deferred(&mut app.session, true);
+    app.ext.events.extend(gridcraft_engine::vba_host::events::take_pending(&mut app.session));
+    let extra = app.ext.events.len().saturating_sub(1000);
+    app.ext.events.drain(..extra);
+    if app.editor.is_some() || app.ext.events.is_empty() {
+        return;
+    }
+    let ev = app.ext.events.remove(0);
+    let name = ev.proc.clone();
+    run_job(app, &name, Job::Event(ev), true);
+}
+
+fn run_job(app: &mut SheetApp, name: &str, job: Job, quiet: bool) {
     #[cfg(target_arch = "wasm32")]
     {
         let mut ui = gridcraft_engine::vba_host::Headless::default();
-        let r = gridcraft_engine::vba_host::run_macro_from(&mut app.session, name, &mut ui, None, caller);
-        finish(app, name, r.map(|v| v.to_str().unwrap_or_default()).map_err(|e| e.to_string()), ui.output);
+        let r = job.run(&mut app.session, &mut ui, None);
+        finish(app, name, r, ui.output, quiet);
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -97,22 +138,18 @@ pub fn start_from(app: &mut SheetApp, name: &str, caller: Option<String>) {
         let (tx, rx) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
         let stop = cancel.clone();
-        let macro_name = name.to_string();
         let spawned = std::thread::Builder::new().name("gridcraft-macro".into()).spawn(move || {
             let mut ui = ChannelUi { tx };
             // A panic (a bug) must not take the workbook with it: the session always comes back.
-            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                gridcraft_engine::vba_host::run_macro_from(&mut session, &macro_name, &mut ui, Some(stop), caller)
-                    .map(|v| v.to_str().unwrap_or_default())
-                    .map_err(|e| e.to_string())
-            }))
-            .unwrap_or_else(|_| Err("The macro stopped because of an internal error. The workbook is as the macro left it.".into()));
+            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.run(&mut session, &mut ui, Some(stop))))
+                .unwrap_or_else(|_| Err("The macro stopped because of an internal error. The workbook is as the macro left it.".into()));
             (session, r)
         });
         match spawned {
             Ok(handle) => {
                 app.ext.macro_run = Some(MacroRun {
                     name: name.into(),
+                    quiet,
                     rx,
                     handle: Some(handle),
                     ask: None,
@@ -127,8 +164,9 @@ pub fn start_from(app: &mut SheetApp, name: &str, caller: Option<String>) {
     }
 }
 
-fn finish(app: &mut SheetApp, name: &str, r: Result<String, String>, output: Vec<String>) {
+fn finish(app: &mut SheetApp, name: &str, r: Result<String, String>, output: Vec<String>, quiet: bool) {
     match r {
+        Ok(_) if quiet && output.is_empty() => {}
         Ok(_) => {
             let msg = if output.is_empty() { format!("{} {name}", app.ui.language.tr("Macro finished:")) } else { output.join("\n") };
             app.toast = Some((msg, crate::now_ms()));
@@ -152,12 +190,13 @@ pub fn frame(app: &mut SheetApp, ui: &mut Ui) -> bool {
         && let Some(h) = run.handle.take()
     {
         let name = run.name.clone();
+        let quiet = run.quiet;
         let output = std::mem::take(&mut run.output);
         app.ext.macro_run = None;
         match h.join() {
             Ok((session, r)) => {
                 app.session = session;
-                finish(app, &name, r, output);
+                finish(app, &name, r, output, quiet);
             }
             Err(_) => app.message = Some(("Macro".into(), "The macro stopped unexpectedly; the workbook could not be recovered from it.".into())),
         }
@@ -285,7 +324,8 @@ pub fn enable(app: &mut SheetApp) {
         .unwrap_or_default();
     if let Some(open) = names
         .iter()
-        .find(|n| n.eq_ignore_ascii_case("ThisWorkbook.Workbook_Open"))
+        // The workbook's module is `ThisWorkbook` in English Excel, `EsteLibro` in Spanish…
+        .find(|n| n.to_ascii_lowercase().ends_with(".workbook_open"))
         .or_else(|| names.iter().find(|n| n.to_ascii_lowercase().ends_with(".auto_open")))
     {
         start(app, &open.clone());
