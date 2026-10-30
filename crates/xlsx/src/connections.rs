@@ -19,7 +19,7 @@ const NS_MAIN: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main
 const TYPE_OLEDB: u32 = 5;
 /// `ST_DbCommandType`: SQL text, table name.
 const COMMAND_SQL: u32 = 2;
-const COMMAND_TABLE: u32 = 3;
+pub(crate) const COMMAND_TABLE: u32 = 3;
 
 // ---------------------------------------------------------------- connection strings
 
@@ -120,6 +120,47 @@ pub fn parse_connection_string(s: &str) -> Vec<(String, String)> {
     out
 }
 
+/// The SQL Server source, login name and command of an OLE DB connection string (`kv`, from
+/// [`parse_connection_string`]) and its command: a table name (`table_command`) or SQL text.
+/// `None` for another provider, no server or an unreadable command.
+pub(crate) fn sql_server_source(kv: &[(String, String)], text: &str, table_command: bool) -> Option<(DataSource, String, QueryCommand)> {
+    let get = |k: &str| kv.iter().find(|(key, _)| key == k).map(|(_, v)| v.as_str());
+    let provider = get("provider")?.to_ascii_lowercase();
+    if !(provider.starts_with("sqloledb") || provider.starts_with("msoledbsql") || provider.starts_with("sqlncli")) {
+        return None;
+    }
+    let integrated = get("integrated security").is_some_and(truthy) || get("trusted_connection").is_some_and(truthy);
+    let user = get("user id").or_else(|| get("uid")).unwrap_or("").to_string();
+    let server = get("data source").or_else(|| get("server")).filter(|v| !v.trim().is_empty())?.trim().to_string();
+    let database = get("initial catalog").or_else(|| get("database")).unwrap_or("").trim().to_string();
+    let command = if table_command {
+        match identifier_parts(text)?.as_slice() {
+            [name] => QueryCommand::Table { schema: String::new(), name: name.clone() },
+            [schema, name] | [_, schema, name] => QueryCommand::Table { schema: schema.clone(), name: name.clone() },
+            _ => return None,
+        }
+    } else if text.trim().is_empty() {
+        return None;
+    } else {
+        QueryCommand::Sql { text: text.to_string() }
+    };
+    let source = DataSource::SqlServer {
+        server,
+        database,
+        encrypt: get("use encryption for data").or_else(|| get("encrypt")).is_some_and(truthy),
+        trust_server_certificate: get("trust server certificate").or_else(|| get("trustservercertificate")).is_some_and(truthy),
+        // A `DOMAIN\name` login signs in to Windows; SQL Server logins have no backslash.
+        auth: if integrated {
+            SqlAuth::Integrated
+        } else if user.contains('\\') {
+            SqlAuth::Windows
+        } else {
+            SqlAuth::Sql
+        },
+    };
+    Some((source, user, command))
+}
+
 fn truthy(v: &str) -> bool {
     matches!(v.trim().to_ascii_lowercase().as_str(), "true" | "yes" | "1" | "mandatory" | "strict" | "sspi")
 }
@@ -130,7 +171,7 @@ fn quote_identifier(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 
-fn command(c: &Connection) -> (String, u32) {
+pub(crate) fn command(c: &Connection) -> (String, u32) {
     match &c.command {
         QueryCommand::Sql { text } => (text.clone(), COMMAND_SQL),
         QueryCommand::Table { schema, name } => {
@@ -462,46 +503,18 @@ pub fn read(x: &El, query_tables: &[(String, u32)], mashup: &[crate::mashup::Sql
             continue;
         }
         let power_query = None;
-        if !(provider.starts_with("sqloledb") || provider.starts_with("msoledbsql") || provider.starts_with("sqlncli")) {
-            return None;
-        }
-        let integrated = get("integrated security").is_some_and(truthy) || get("trusted_connection").is_some_and(truthy);
-        let user = get("user id").or_else(|| get("uid")).unwrap_or("").to_string();
-        let server = get("data source").or_else(|| get("server")).filter(|v| !v.trim().is_empty())?.trim().to_string();
-        let database = get("initial catalog").or_else(|| get("database")).unwrap_or("").trim().to_string();
-        let text = db.attr("command").unwrap_or("");
-        let command = match db.attr_u32("commandType").unwrap_or(COMMAND_SQL) {
-            COMMAND_SQL if !text.trim().is_empty() => QueryCommand::Sql { text: text.to_string() },
-            COMMAND_TABLE => {
-                let parts = identifier_parts(text)?;
-                match parts.as_slice() {
-                    [name] => QueryCommand::Table { schema: String::new(), name: name.clone() },
-                    [schema, name] => QueryCommand::Table { schema: schema.clone(), name: name.clone() },
-                    [_db, schema, name] => QueryCommand::Table { schema: schema.clone(), name: name.clone() },
-                    _ => return None,
-                }
-            }
+        let table_command = match db.attr_u32("commandType").unwrap_or(COMMAND_SQL) {
+            COMMAND_SQL => false,
+            COMMAND_TABLE => true,
             _ => return None,
         };
+        let (source, user, command) = sql_server_source(&kv, db.attr("command").unwrap_or(""), table_command)?;
         let table = query_tables.iter().find(|(_, cid)| *cid == id).map(|(t, _)| t.clone())?;
         out.push(Connection {
             id,
             name: c.attr("name").unwrap_or("").to_string(),
             description: c.attr("description").unwrap_or("").to_string(),
-            source: DataSource::SqlServer {
-                server,
-                database,
-                encrypt: get("use encryption for data").or_else(|| get("encrypt")).is_some_and(truthy),
-                trust_server_certificate: get("trust server certificate").or_else(|| get("trustservercertificate")).is_some_and(truthy),
-                // A `DOMAIN\name` login signs in to Windows; SQL Server logins have no backslash.
-                auth: if integrated {
-                    SqlAuth::Integrated
-                } else if user.contains('\\') {
-                    SqlAuth::Windows
-                } else {
-                    SqlAuth::Sql
-                },
-            },
+            source,
             user,
             command,
             table,

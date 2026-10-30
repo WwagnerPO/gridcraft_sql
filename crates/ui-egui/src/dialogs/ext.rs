@@ -9,7 +9,7 @@ use super::Field::*;
 use crate::SheetApp;
 
 /// The dialogs drawn here.
-const NAMES: &[&str] = &["sqlServer", "dataSourceSettings", "saveToDatabase", "exportToSqlServer", "sqlExecute", "macros"];
+const NAMES: &[&str] = &["sqlServer", "existingConnections", "dataSourceSettings", "saveToDatabase", "exportToSqlServer", "sqlExecute", "macros"];
 
 impl Dialog {
     /// The sign-in step of the SQL Server dialog on its own: Refresh asks for a login with it,
@@ -40,6 +40,7 @@ pub(super) fn open(app: &mut SheetApp, name: &str, params: &Json) -> Option<Opti
             json!({"stage": "source", "server": p("server"), "database": p("database"), "encrypt": true, "trust": false}),
         )),
         "dataSourceSettings" => Some(Dialog::custom("dataSourceSettings", "Data Source Settings", json!({}))),
+        "existingConnections" => Some(Dialog::custom("existingConnections", "Existing Connections", json!({}))),
         // Write dialogs take their values back from `params` after a sign-in.
         "saveToDatabase" => Some(Dialog::custom("saveToDatabase", "Save Changes to Database", params.clone())),
         "exportToSqlServer" => Some(Dialog::custom("exportToSqlServer", "Export to SQL Server", params.clone())),
@@ -94,6 +95,7 @@ fn connection_properties(app: &mut SheetApp, params: &Json) -> Option<Dialog> {
 pub(super) fn width(d: &Dialog) -> Option<f32> {
     match d.name.as_str() {
         "sqlServer" if matches!(d.values.get("stage").and_then(Json::as_str), Some("navigator" | "preview")) => Some(680.0),
+        "existingConnections" => Some(500.0),
         "sqlServer" | "dataSourceSettings" | "saveToDatabase" | "exportToSqlServer" | "sqlExecute" => Some(440.0),
         _ => None,
     }
@@ -109,6 +111,7 @@ pub(super) fn show(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open: 
     match d.name.as_str() {
         "sqlServer" => crate::get_data::sql_server(app, ui, d, open),
         "dataSourceSettings" => crate::get_data::data_source_settings(app, ui, d, open),
+        "existingConnections" => crate::get_data::existing_connections(app, ui, d, open),
         "saveToDatabase" => crate::get_data::save_to_database(app, ui, d, open),
         "exportToSqlServer" => crate::get_data::export_to_sql_server(app, ui, d, open),
         "sqlExecute" => crate::get_data::run_sql(app, ui, d, open),

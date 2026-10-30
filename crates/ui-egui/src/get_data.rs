@@ -559,6 +559,11 @@ pub fn data_source_settings(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, ope
 /// The servers of the connections a refresh command reaches (`data.refresh` the one named or at
 /// the active cell; `data.refreshAll` all of them).
 fn servers_for(app: &SheetApp, id: &str, params: &Json) -> Vec<String> {
+    // A connection file names its server itself.
+    if id == "data.fromConnectionFile" {
+        let integrated = params["auth"].as_str() == Some("integrated");
+        return params["server"].as_str().filter(|s| !integrated && !s.is_empty()).map(|s| vec![s.to_string()]).unwrap_or_default();
+    }
     let Some(doc) = app.session.active() else { return vec![] };
     let conns = &doc.wb.connections;
     let pick: Vec<&gridcraft_engine::model::Connection> = if id == "data.refreshAll" {
@@ -590,11 +595,14 @@ pub fn refresh_with_login(app: &mut SheetApp, id: &str, params: Json) {
     for s in &servers {
         recall_login(app, s);
     }
+    // The login name of a query on that server, else the one the call names (a connection file).
+    let named_user = params["user"].as_str().unwrap_or("").to_string();
     let user_of = |app: &SheetApp, server: &str| {
         app.session
             .active()
             .and_then(|d| d.wb.connections.iter().find(|c| c.source.server().eq_ignore_ascii_case(server)).map(|c| c.user.clone()))
-            .unwrap_or_default()
+            .filter(|u| !u.is_empty())
+            .unwrap_or_else(|| named_user.clone())
     };
     if let Some(server) = servers.iter().find(|s| app.session.credential(s).is_none()) {
         let user = user_of(app, server);
@@ -682,6 +690,9 @@ pub fn queries_pane(app: &mut SheetApp, ui: &mut Ui) {
                 }
                 if ui.small_button(tr(app, "Properties…")).clicked() {
                     app.open_dialog("connectionProperties", json!({"connection": c.name}));
+                }
+                if ui.small_button(tr(app, "Export…")).on_hover_text(tr(app, "Save this connection on this computer")).clicked() {
+                    export_connection_file(app, json!({"connection": c.name}));
                 }
                 if ui.small_button(tr(app, "Delete")).clicked() {
                     app.run_or_alert("data.deleteConnection", json!({"connection": c.name}));
@@ -1002,4 +1013,108 @@ pub fn run_sql(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut bool)
             set(d, "confirm", json!(true));
         }
     });
+}
+
+// ---------------------------------------------------------------- connection files
+
+/// Data › Get Data › Existing Connections: the connection files saved on this computer
+/// (`Documents/My Data Sources`). Open loads the one picked as a new query.
+pub fn existing_connections(app: &mut SheetApp, ui: &mut Ui, d: &mut Dialog, open: &mut bool) {
+    if !d.values.contains_key("list") {
+        match app.session.run("data.existingConnections", json!({})) {
+            Ok(v) => {
+                set(d, "list", v["connections"].clone());
+                set(d, "folder", v["folder"].clone());
+            }
+            Err(e) => {
+                set(d, "list", json!([]));
+                set(d, "error", json!(message(&e)));
+            }
+        }
+    }
+    let list: Vec<Json> = d.values.get("list").and_then(Json::as_array).cloned().unwrap_or_default();
+    let folder = s(d, "folder");
+    if !folder.is_empty() {
+        ui.label(RichText::new(format!("{} {folder}", tr(app, "Connection files on this computer:"))).small().weak());
+        ui.add_space(4.0);
+    }
+    let mut picked = s(d, "picked");
+    let mut chosen = false;
+    egui::ScrollArea::vertical().max_height(280.0).show(ui, |ui| {
+        if list.is_empty() {
+            ui.label(RichText::new(tr(app, "No connection files yet. Use Export Connection File on a query to save one here.")).italics());
+        }
+        for c in &list {
+            let path = c["path"].as_str().unwrap_or("");
+            let what = c["table"].as_str().map(str::to_string).unwrap_or_else(|| tr(app, "SQL statement").to_string());
+            let r = ui.selectable_label(picked == path, RichText::new(c["name"].as_str().unwrap_or("")).strong());
+            ui.label(
+                RichText::new(format!("{} · {} · {what}", c["server"].as_str().unwrap_or(""), c["database"].as_str().unwrap_or(""))).small().weak(),
+            );
+            if r.clicked() {
+                picked = path.to_string();
+            }
+            if r.double_clicked() {
+                picked = path.to_string();
+                chosen = true;
+            }
+            ui.add_space(2.0);
+        }
+    });
+    set(d, "picked", json!(picked));
+    error_label(ui, d);
+    ui.add_space(8.0);
+    let mut browse = false;
+    ui.horizontal(|ui| {
+        if app.services.pick_open.is_some() && ui.button(tr(app, "Browse for More…")).clicked() {
+            browse = true;
+        }
+        button_row(ui, |ui| {
+            if secondary(ui, tr(app, "Cancel")) {
+                *open = false;
+            }
+            if primary(ui, tr(app, "Open")) && !picked.is_empty() {
+                chosen = true;
+            }
+        });
+    });
+    if browse && let Some(path) = app.services.pick_open.as_ref().and_then(|pick| pick()) {
+        match app.session.run("data.existingConnections", json!({"path": path})) {
+            Ok(v) if v["connections"].as_array().is_some_and(|a| !a.is_empty()) => {
+                let mut list = list.clone();
+                list.retain(|c| c["path"].as_str() != Some(path.as_str()));
+                list.extend(v["connections"].as_array().cloned().unwrap_or_default());
+                set(d, "list", json!(list));
+                set(d, "picked", json!(path));
+                set(d, "error", json!(""));
+            }
+            Ok(_) => set(d, "error", json!(tr(app, "That file isn't a SQL Server connection file GridCraft can open."))),
+            Err(e) => set(d, "error", json!(message(&e))),
+        }
+    }
+    if chosen && let Some(c) = list.iter().find(|c| c["path"].as_str() == Some(picked.as_str())) {
+        *open = false;
+        open_connection_file(app, c);
+    }
+}
+
+/// Loads a connection file listed by `data.existingConnections`, asking for the login first
+/// when the server has none.
+pub fn open_connection_file(app: &mut SheetApp, entry: &Json) {
+    let params = json!({
+        "path": entry["path"],
+        "server": entry["server"],
+        "auth": entry["auth"],
+        "user": entry["user"],
+    });
+    refresh_with_login(app, "data.fromConnectionFile", params);
+}
+
+/// Export Connection File: saves the query of the active table (or `connection`) in
+/// `Documents/My Data Sources` and says where.
+pub fn export_connection_file(app: &mut SheetApp, params: Json) {
+    match app.run("data.exportConnectionFile", params) {
+        Ok(v) => app.toast = Some((format!("{} {}", tr(app, "Connection saved:"), v["path"].as_str().unwrap_or("")), crate::now_ms())),
+        Err(e) => app.message = Some((tr(app, "Export Connection File").into(), message(&e))),
+    }
 }

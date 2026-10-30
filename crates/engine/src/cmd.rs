@@ -2,6 +2,7 @@
 //! `data.sortAscending`) plus primitive editing commands (`cell.set`, `selection.set`).
 
 pub mod analysis;
+pub mod connection_files;
 pub mod connections;
 pub mod data;
 pub mod dbwrite;
@@ -142,6 +143,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(insert::specs());
         v.extend(data::specs());
         v.extend(connections::specs());
+        v.extend(connection_files::specs());
         v.extend(dbwrite::specs());
         v.extend(vba::specs());
         v.extend(formulas::specs());

@@ -65,6 +65,16 @@ impl DataSource {
             DataSource::SqlServer { database, .. } => database,
         }
     }
+    pub fn encrypted(&self) -> bool {
+        match self {
+            DataSource::SqlServer { encrypt, .. } => *encrypt,
+        }
+    }
+    pub fn trusts_server_certificate(&self) -> bool {
+        match self {
+            DataSource::SqlServer { trust_server_certificate, .. } => *trust_server_certificate,
+        }
+    }
 }
 
 /// What a connection asks its source for.

@@ -39,6 +39,7 @@ pub fn run_or_alert(app: &mut SheetApp, id: &str, params: &Json) -> bool {
 pub fn ui_action(app: &mut SheetApp, name: &str) -> bool {
     match name {
         "enableMacros" => macros::enable(app),
+        "exportConnectionFile" => get_data::export_connection_file(app, serde_json::json!({})),
         _ => return false,
     }
     true

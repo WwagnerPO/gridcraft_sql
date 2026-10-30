@@ -318,7 +318,7 @@ fn quietly<R>(s: &mut Session, f: impl FnOnce(&mut Session) -> R) -> R {
 
 // ---------------------------------------------------------------- load
 
-fn from_sql_server(s: &mut Session, p: &Json) -> Result<Json> {
+pub(crate) fn from_sql_server(s: &mut Session, p: &Json) -> Result<Json> {
     const C: &str = "data.fromSqlServer";
     if str_param(p, "server").is_none_or(|v| v.trim().is_empty()) {
         s.ui_requests.push(crate::UiRequest::Dialog("sqlServer".into(), json!({})));

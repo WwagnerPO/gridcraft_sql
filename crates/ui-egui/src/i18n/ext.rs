@@ -27,6 +27,23 @@ fn spanish(text: &str) -> Option<&'static str> {
         "From SQL Server Database…" => "Desde una base de datos de SQL Server…",
         "From Table/Range" => "Desde una tabla o rango",
         "Data Source Settings…" => "Configuración de origen de datos…",
+        // Connection files (Existing Connections, Export Connection File)
+        "Existing Connections…" => "Conexiones existentes…",
+        "Existing Connections" => "Conexiones existentes",
+        "Export Connection File…" => "Exportar archivo de conexión…",
+        "Export Connection File" => "Exportar archivo de conexión",
+        "Connection files on this computer:" => "Archivos de conexión en este equipo:",
+        "No connection files yet. Use Export Connection File on a query to save one here." => {
+            "Aún no hay archivos de conexión. Use Exportar archivo de conexión en una consulta para guardar uno aquí."
+        }
+        "Browse for More…" => "Examinar en busca de más…",
+        "Open" => "Abrir",
+        "That file isn't a SQL Server connection file GridCraft can open." => {
+            "Ese archivo no es un archivo de conexión de SQL Server que GridCraft pueda abrir."
+        }
+        "Connection saved:" => "Conexión guardada:",
+        "Export…" => "Exportar…",
+        "Save this connection on this computer" => "Guardar esta conexión en este equipo",
         "Get Data from a file or a database" => "Obtener datos de un archivo o una base de datos",
         "Refresh\nAll" => "Actualizar\ntodo",
         "Refresh All" => "Actualizar todo",

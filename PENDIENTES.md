@@ -3,7 +3,7 @@
 Lista de trabajo de lo propio. Lo del GridCraft oficial está en `docs/gaps.md` (no se toca).
 Marcar `[x]` al terminar y anotar el commit.
 
-Actualizado: 2026-10-29.
+Actualizado: 2026-10-30.
 
 ## Integración con el oficial
 
@@ -22,7 +22,6 @@ Actualizado: 2026-10-29.
 
 ## SQL Server
 
-- [ ] Iniciar sesión con **Microsoft Entra** (cuentas de Azure).
 - [ ] **Consultas en segundo plano**: hoy la ventana espera a que termine la consulta.
 - [ ] **Editor de Power Query**: filtrar, combinar y cambiar tipos antes de cargar (hoy solo con
   SQL escrito a mano).
@@ -50,7 +49,16 @@ Actualizado: 2026-10-29.
   nuestros comandos (`data.*` de bases de datos, `vba.*`).
 - [ ] `cargo audit` y `cargo deny` (vulnerabilidades y licencias: nada GPL).
 
+## Descartado
+
+- Iniciar sesión con Microsoft Entra (cuentas de Azure): no se hará (2026-10-30).
+
 ## Hecho
+
+- [x] 2026-10-30: **conexiones guardadas en el equipo** como Excel (`.odc` en
+  `Documentos/My Data Sources`): Exportar archivo de conexión, Conexiones existentes, abrir una
+  pidiendo el login. Comandos `data.exportConnectionFile`, `data.existingConnections`,
+  `data.fromConnectionFile`.
 
 - [x] 2026-10-29: fusionado el oficial (1045 commits, v0.13.0) con nuestra rama y todo pasado a
   `main`. Incluye el arreglo del `#CIRC!` falso en cadenas de más de 2000 fórmulas.

@@ -365,3 +365,43 @@ fn a_remembered_login_is_used_after_a_restart() {
     settle(&mut h);
     assert_eq!(logins.load("db.example"), None);
 }
+
+#[test]
+fn a_saved_connection_opens_from_existing_connections() {
+    let dir = std::env::temp_dir().join(format!("gridcraft-ui-odc-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("customers.odc");
+    // Load a table and save its connection on this computer.
+    let db = Arc::new(FakeDb::default());
+    let mut h = harness(db.clone());
+    h.state_mut()
+        .run("data.fromSqlServer", json!({"server": "db.example", "database": "Shop", "table": "dbo.Customers", "user": "reader", "password": "pw"}))
+        .unwrap();
+    h.state_mut().run("data.exportConnectionFile", json!({"path": path.to_string_lossy()})).unwrap();
+
+    // Another day: a new window with no login opens it from Existing Connections.
+    let mut h = harness(db.clone());
+    h.state_mut().open_dialog("existingConnections", json!({}));
+    settle(&mut h);
+    let listed = h.state_mut().run("data.existingConnections", json!({"folder": dir.to_string_lossy()})).unwrap();
+    set(&mut h, "list", listed["connections"].clone());
+    set(&mut h, "picked", json!(path.to_string_lossy()));
+    settle(&mut h);
+    snapshot(&mut h, "existing-connections");
+    h.get_by_label("dbo Customers").click();
+    settle(&mut h);
+    h.get_by_label("Open").click();
+    settle(&mut h);
+    assert_eq!(stage(&h), "credentials", "the file has no password: the login is asked for");
+    assert_eq!(h.state().dialog.as_ref().unwrap().values["user"], "reader", "the file's user is filled in");
+    set(&mut h, "password", json!("pw"));
+    settle(&mut h);
+    h.get_by_label("Connect").click();
+    settle(&mut h);
+    assert!(h.state().dialog.is_none());
+    let doc = h.state().session.active().unwrap();
+    assert_eq!(doc.wb.connections.len(), 1);
+    assert_eq!(doc.wb.connections[0].command, QueryCommand::Table { schema: "dbo".into(), name: "Customers".into() });
+    let _ = std::fs::remove_dir_all(&dir);
+}

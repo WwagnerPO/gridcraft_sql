@@ -1,6 +1,6 @@
 # Loading data from SQL Server
 
-> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** major (created with the SQL Server connector) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-30 · **Last updated:** 2026-10-30 · **Change:** minor (connection files on this computer) · **Target:** Microsoft Excel (Microsoft 365)
 
 GridCraft loads tables, views and SQL statements from Microsoft SQL Server and Azure SQL into a
 worksheet table, and refreshes them later. It speaks SQL Server's protocol (TDS) directly through
@@ -70,6 +70,24 @@ is none, or the server refuses it, the app asks and then carries on. **Data › 
 Source Settings…** lists the session's logins and clears them (from the credential store too).
 Windows (current user) sign-in needs no stored login at all.
 
+## Connections saved on this computer
+
+As in Excel, a connection can be kept on the computer, apart from any workbook, as an Office Data
+Connection file (`.odc`, [MS-ODCFF]) in **Documents/My Data Sources**:
+
+- **Data › Refresh All › Export Connection File…** (or **Export…** on a query in Queries &
+  Connections) saves the query's server, database, sign-in kind, user name and table or SQL
+  statement. Never the password. A file with the same name is never replaced: the new one gets
+  ` (2)`, ` (3)`…
+- **Data › Get Data › Existing Connections…** lists the connection files in that folder (**Browse
+  for More…** picks one elsewhere). **Open** loads it into a new sheet as a new query, asking for
+  the login when the server has none (or using the one remembered on this computer).
+
+Files written by Excel for SQL Server (`SQLOLEDB`, `MSOLEDBSQL`, `SQLNCLI` providers; a table or a
+SQL statement) open too; other kinds of connection files are left out of the list.
+
+[MS-ODCFF]: https://learn.microsoft.com/openspecs/office_file_formats/ms-odcff/
+
 ## In the file
 
 Queries are saved in the XLSX as Excel does for an OLE DB SQL Server connection: a `<connection>`
@@ -102,6 +120,9 @@ merges, changed types, other sources) are kept unchanged but not shown.
 | `data.saveToDatabase` | `{table? \| connection?, dryRun?}` → `{inserted, updated, deleted}` |
 | `data.exportToSqlServer` | `{table, range?, mode?: create \| append \| replace, connection? \| server…, dryRun?}` |
 | `data.sqlExecute` | `{sql, params? \| cells?, connection? \| server…}` → `{rowsAffected}` |
+| `data.exportConnectionFile` | `{connection? \| table?, path?, overwrite?}` saves a query's connection as `.odc` → `{path}` |
+| `data.existingConnections` | `{folder? \| path?}` → `{folder, connections: [{name, path, server, database, auth, user, table \| sql}]}` |
+| `data.fromConnectionFile` | `{path, user?, password?, name?}` loads a connection file as `data.fromSqlServer` does |
 
 ```sh
 gridcraft-cli run --cmd 'data.fromSqlServer={"server":"db.example,1433","database":"Shop","table":"dbo.Customers","user":"reader","password":"…"}' --out customers.xlsx
@@ -137,3 +158,4 @@ GRIDCRAFT_SQLSERVER_TEST='localhost,1433;sa;YourStrong!Passw0rd' cargo test -p g
 | Date | Change | Summary |
 |---|---|---|
 | 2026-10-13 | major | Created with the SQL Server connector |
+| 2026-10-30 | minor | Connections saved on this computer (`.odc`): Export Connection File, Existing Connections |

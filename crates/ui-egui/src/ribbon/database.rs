@@ -17,6 +17,7 @@ pub(super) fn data_groups(app: &mut SheetApp, ui: &mut Ui) {
                 ("From SQL Server Database…", "dialog:sqlServer", json!({})),
                 ("From Table/Range", "data.fromTableRange", json!({})),
                 ("-", "", json!({})),
+                ("Existing Connections…", "dialog:existingConnections", json!({})),
                 ("Data Source Settings…", "dialog:dataSourceSettings", json!({})),
             ],
         );
@@ -34,6 +35,7 @@ pub(super) fn data_groups(app: &mut SheetApp, ui: &mut Ui) {
                 ("Refresh", "data.refresh", json!({})),
                 ("-", "", json!({})),
                 ("Connection Properties…", "dialog:connectionProperties", json!({})),
+                ("Export Connection File…", "dialog:exportConnectionFile", json!({})),
             ],
         );
     });

@@ -597,7 +597,7 @@ impl Drop for ScriptSandbox {
 
 /// Refuses file access while a [`ScriptSandbox`] is alive (and, failing closed, while the
 /// thread is being torn down).
-fn script_sandbox_check(path: &str) -> Result<()> {
+pub(crate) fn script_sandbox_check(path: &str) -> Result<()> {
     if SCRIPT_SANDBOX.try_with(|c| c.get() > 0).unwrap_or(true) {
         return Err(EngineError::Other(format!("{path}: scripts can't read or write files")));
     }
