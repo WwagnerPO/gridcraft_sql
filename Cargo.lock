@@ -1071,6 +1071,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "craft-web-host"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=2e2312ddaf21bc3d85cd3395d0955c7d239306f6#2e2312ddaf21bc3d85cd3395d0955c7d239306f6"
+dependencies = [
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "craft-window"
 version = "0.1.0"
 source = "git+https://github.com/storytold/craft-libs?rev=c5a1cbfb5f9049f9270955caffb5bee5997aebf7#c5a1cbfb5f9049f9270955caffb5bee5997aebf7"
@@ -1433,6 +1442,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "egui_extras"
+version = "0.37.0"
+source = "git+https://github.com/storytold/egui.git?rev=6d518fc799681571963842f95b55a6b68431b15a#6d518fc799681571963842f95b55a6b68431b15a"
+dependencies = [
+ "ahash",
+ "egui",
+ "enum-map",
+ "itertools",
+ "log",
+ "profiling",
+]
+
+[[package]]
 name = "egui_glow"
 version = "0.37.0"
 source = "git+https://github.com/storytold/egui.git?rev=6d518fc799681571963842f95b55a6b68431b15a#6d518fc799681571963842f95b55a6b68431b15a"
@@ -1498,6 +1520,26 @@ name = "endi"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
+
+[[package]]
+name = "enum-map"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4532960034c15ba2f55e9eee631040ecc473c32e6c4b200828c759840f13a06"
+dependencies = [
+ "enum-map-derive",
+]
+
+[[package]]
+name = "enum-map-derive"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7127272f64b3e098f7d81f350d672081b879bff896d219c42370dc858b1af9ff"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.6",
+]
 
 [[package]]
 name = "enumflags2"
@@ -2072,7 +2114,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "arboard",
  "chrono",
@@ -2101,7 +2143,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-calc"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "gridcraft-core",
  "gridcraft-formula",
@@ -2113,7 +2155,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-chart"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "gridcraft-calc",
  "gridcraft-core",
@@ -2124,7 +2166,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-cli"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "gridcraft-engine",
  "gridcraft-mcp",
@@ -2137,7 +2179,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-core"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "chrono",
  "js-sys",
@@ -2148,7 +2190,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-engine"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "gridcraft-calc",
  "gridcraft-chart",
@@ -2172,7 +2214,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-formula"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "gridcraft-core",
  "serde",
@@ -2181,7 +2223,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-functions"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "gridcraft-core",
  "regex",
@@ -2189,7 +2231,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-math"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "ratex-font",
  "ratex-layout",
@@ -2199,7 +2241,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-mcp"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "gridcraft-engine",
  "log",
@@ -2208,7 +2250,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-model"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "gridcraft-core",
  "gridcraft-formula",
@@ -2221,18 +2263,18 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-numfmt"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "gridcraft-core",
 ]
 
 [[package]]
 name = "gridcraft-pdf"
-version = "0.16.1"
+version = "0.17.0"
 
 [[package]]
 name = "gridcraft-sqlserver"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "futures-util",
  "gridcraft-engine",
@@ -2244,12 +2286,13 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-ui-egui"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "craft-ui",
  "craft-update",
  "craft-window",
  "egui",
+ "egui_extras",
  "egui_kittest",
  "epaint_default_fonts",
  "gridcraft-chart",
@@ -2269,7 +2312,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-vba"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "gridcraft-core",
  "gridcraft-numfmt",
@@ -2277,8 +2320,9 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-web"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
+ "craft-web-host",
  "eframe",
  "egui",
  "gridcraft-engine",
@@ -2294,7 +2338,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-xlsx"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "aes",
  "gridcraft-core",
@@ -7040,7 +7084,7 @@ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "xtask"
-version = "0.16.1"
+version = "0.17.0"
 dependencies = [
  "gridcraft-engine",
  "serde_json",
@@ -7397,11 +7441,6 @@ dependencies = [
 
 [[patch.unused]]
 name = "egui_demo_lib"
-version = "0.37.0"
-source = "git+https://github.com/storytold/egui.git?rev=6d518fc799681571963842f95b55a6b68431b15a#6d518fc799681571963842f95b55a6b68431b15a"
-
-[[patch.unused]]
-name = "egui_extras"
 version = "0.37.0"
 source = "git+https://github.com/storytold/egui.git?rev=6d518fc799681571963842f95b55a6b68431b15a#6d518fc799681571963842f95b55a6b68431b15a"
 

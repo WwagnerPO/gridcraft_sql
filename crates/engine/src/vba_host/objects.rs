@@ -3,12 +3,10 @@
 //! `ADODB.Stream` for writing text files, and the file functions `Dir`, `Kill`, `FileCopy`,
 //! `MkDir`.
 
-use std::sync::Arc;
-
+use super::FormButton;
 use gridcraft_core::{CellRef, RangeRef};
 use gridcraft_vba::error::err;
 use gridcraft_vba::{Value as V, VbaError};
-use gridcraft_xlsx::form_controls::{self, FormButton};
 use serde_json::json;
 
 use super::{ExcelHost, Rng, SEP, host, range_value};
@@ -27,7 +25,7 @@ impl ExcelHost<'_> {
     fn buttons_of(&self, uid: u64, sheet: &str) -> Result<Vec<FormButton>, VbaError> {
         let wb = self.wb(uid)?;
         let si = self.sheet_index(uid, sheet)?;
-        Ok(wb.sheet(si).and_then(|s| s.preserved.as_deref()).map(form_controls::buttons).unwrap_or_default())
+        Ok(wb.sheet(si).map(super::sheet_buttons).unwrap_or_default())
     }
 
     fn shape_handle(uid: u64, sheet: &str, b: &FormButton) -> V {
@@ -154,10 +152,8 @@ impl ExcelHost<'_> {
         let text = text.to_string();
         crate::cmd::edit(self.s, |cx| {
             let sh = cx.sheet_mut(si)?;
-            let p = sh.preserved.as_mut().ok_or_else(|| crate::EngineError::Other("The button is gone.".into()))?;
-            if !form_controls::set_caption(Arc::make_mut(p), sid, &text) {
-                return Err(crate::EngineError::Other("The button is gone.".into()));
-            }
+            let c = sh.controls.iter_mut().find(|c| c.id == sid).ok_or_else(|| crate::EngineError::Other("The button is gone.".into()))?;
+            c.text = text.clone();
             Ok(())
         })
         .map_err(super::engine_err)

@@ -225,14 +225,10 @@ Sub Stamp()
 End Sub
 "#;
     let mut s = session(code);
-    let p = gridcraft_xlsx::form_controls::sample_preserved(&[
-        (1025, "Button 1", "Click to approve", "Stamp", [1, 5, 2, 3, 3, 8, 2, 18]),
-        (1026, "Button 2", "Click to approve", "Stamp", [1, 5, 3, 3, 3, 8, 3, 18]),
-    ]);
-    {
-        let wb = std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().wb);
-        let sh = wb.sheet_mut(0).unwrap();
-        sh.preserved = Some(std::sync::Arc::new(p));
+    // Two form buttons in B3 and B4 running the VBA macro Stamp (upstream's form controls).
+    for at in ["B3", "B4"] {
+        s.execute("insert.button", json!({"at": at, "dx": 4, "dy": 2, "width": 150, "height": 12, "text": "Click to approve", "macro": "Stamp"}))
+            .unwrap();
     }
     s.execute("cell.set", json!({"cell": "F4", "input": "INV-1"})).unwrap();
     if protect {
@@ -480,4 +476,26 @@ End Sub\r\n"
     let e = s.execute("vba.run", json!({"macro": "T"})).unwrap_err().to_string();
     assert!(e.contains("53") || e.contains("not found"), "{e}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_vba_button_survives_xlsm_and_presses_after_enable_content() {
+    // Upstream reads form buttons into Sheet::controls since 0.17; a button whose macro is VBA
+    // still runs it (Application.Caller is the button), only once macros are enabled.
+    let mut s = session("Attribute VB_Name = \"Module1\"\r\nSub Mark()\r\n Range(\"A1\").Value = Application.Caller\r\nEnd Sub\r\n");
+    s.execute("insert.button", json!({"at": "C4", "text": "Run me", "macro": "Mark"})).unwrap();
+    let path = std::env::temp_dir().join(format!("gridcraft-vba-button-{}.xlsm", std::process::id()));
+    s.execute("file.saveAs", json!({"path": path.to_string_lossy()})).unwrap();
+    let mut t = Session::new();
+    t.execute("file.open", json!({"path": path.to_string_lossy()})).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let list = t.execute("vba.buttons", json!({})).unwrap();
+    assert_eq!((list[0]["name"].as_str(), list[0]["macro"].as_str()), (Some("Button 1"), Some("Mark")));
+    let id = t.execute("control.list", json!({})).unwrap()[0]["id"].clone();
+    let e = t.execute("control.press", json!({"id": id})).unwrap_err().to_string();
+    assert!(e.contains("disabled"), "{e}");
+    assert_eq!(cell(&t, "A1"), CV::Empty);
+    t.execute("vba.trust", json!({})).unwrap();
+    t.execute("control.press", json!({"id": id})).unwrap();
+    assert_eq!(cell(&t, "A1"), CV::text("Button 1"));
 }

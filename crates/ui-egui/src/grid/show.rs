@@ -174,7 +174,6 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
         app.selected_object = None;
     }
     let objects = crate::chartview::paint_objects(app, &painter.with_clip_rect(geo.cells), &geo, &wb, si, sh);
-    crate::ext::paint_controls(app, &painter.with_clip_rect(geo.cells), &geo, sh);
     paint_overlays(OverlayInput {
         app,
         ui,

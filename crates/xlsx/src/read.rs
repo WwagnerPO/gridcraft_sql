@@ -37,6 +37,9 @@ pub struct Ctx<'a> {
     pub cf_ext_ids: Vec<(String, usize)>,
     /// Tables bound to a query table: (table name, connection id).
     pub query_tables: Vec<(String, u32)>,
+    /// Bytes charged so far for shared formulas expanded into dependent cells (see
+    /// [`crate::sheet_read::MAX_SHARED_FORMULA_BYTES`]).
+    pub shared_formula_bytes: u64,
     /// Whether GridCraft calculates a function, when the caller says: cell formulas wrapped by
     /// Google Sheets' export are then read as the formula inside (see [`crate::read_xlsx_with`]).
     pub known_function: Option<&'a dyn Fn(&str) -> bool>,
@@ -258,6 +261,7 @@ pub fn read_xlsx<'a>(bytes: &'a [u8], known_function: Option<&'a dyn Fn(&str) ->
         cell_pictures: vec![],
         cf_ext_ids: vec![],
         query_tables: vec![],
+        shared_formula_bytes: 0,
         known_function,
         python: Default::default(),
     };
@@ -330,12 +334,12 @@ pub fn read_xlsx<'a>(bytes: &'a [u8], known_function: Option<&'a dyn Fn(&str) ->
             continue;
         }
         let name = names.unique(&name, i);
-        let mut sheet = match crate::sheet_read::read_sheet(&mut cx, &rel.target, &name) {
+        let (mut sheet, read_controls) = match crate::sheet_read::read_sheet(&mut cx, &rel.target, &name) {
             Ok(s) => s,
             Err(IoError::TooLarge(m)) => return Err(IoError::TooLarge(m)),
             Err(e) => {
                 cx.warn(format!("sheet \"{name}\" could not be read: {e}"));
-                Sheet::new(name.clone())
+                (Sheet::new(name.clone()), Default::default())
             }
         };
         match crate::pivot::read_pivots(&mut cx, &mut pivot_caches, &rel.target, &name) {
@@ -343,7 +347,7 @@ pub fn read_xlsx<'a>(bytes: &'a [u8], known_function: Option<&'a dyn Fn(&str) ->
             Err(IoError::TooLarge(m)) => return Err(IoError::TooLarge(m)),
             Err(e) => cx.warn(format!("PivotTables on sheet \"{name}\" could not be read: {e}")),
         }
-        sheet.preserved = kept.sheet(&mut cx, &rel.target, &name);
+        sheet.preserved = kept.sheet(&mut cx, &rel.target, &name, &read_controls);
         sheet.file_id = se.attr_u32("sheetId").unwrap_or(0);
         sheet.visibility = match se.attr("state") {
             Some("hidden") => Visibility::Hidden,

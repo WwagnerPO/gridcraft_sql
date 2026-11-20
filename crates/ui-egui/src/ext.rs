@@ -45,14 +45,11 @@ pub fn ui_action(app: &mut SheetApp, name: &str) -> bool {
     true
 }
 
-/// Form-control buttons over the sheet's cells.
-pub fn paint_controls(app: &SheetApp, painter: &egui::Painter, geo: &crate::grid::Geo, sh: &gridcraft_engine::model::Sheet) {
-    crate::controls::paint(app, painter, geo, sh);
-}
-
-/// A click on the sheet: true when a button took it.
-pub fn click_control(app: &mut SheetApp, geo: &crate::grid::Geo, sh: &gridcraft_engine::model::Sheet, p: egui::Pos2) -> bool {
-    crate::controls::click(app, geo, sh, p)
+/// A form button pressed in the window (`control.press`) whose macro is a VBA macro: runs it on
+/// the macro worker, with real message boxes and `Application.Caller` set to the button. True
+/// when the button was one.
+pub fn press_button(app: &mut SheetApp, params: &Json) -> bool {
+    crate::controls::press(app, params)
 }
 
 /// After a workbook opened from a file.
