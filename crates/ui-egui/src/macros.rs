@@ -376,5 +376,10 @@ pub fn dialog(app: &mut SheetApp, ui: &mut Ui, d: &mut crate::dialogs::Dialog, o
         if ui.button(lang.tr("Cancel")).clicked() {
             *open = false;
         }
+        // GridCraft's own (command-list) macros live in their own dialog.
+        if ui.button(lang.tr("GridCraft macros…")).clicked() {
+            *open = false;
+            app.open_dialog("macros", json!({}));
+        }
     });
 }

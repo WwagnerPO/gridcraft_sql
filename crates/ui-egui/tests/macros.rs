@@ -62,7 +62,7 @@ fn run_from_the_dialog_and_answer_a_message_box() {
         "Attribute VB_Name = \"Module1\"\r\nSub Saludo()\r\n    If MsgBox(\"¿Escribir?\", vbYesNo) = vbYes Then Range(\"A1\").Value = \"sí\" Else Range(\"A1\").Value = \"no\"\r\n    Range(\"A2\").Value = 42\r\nEnd Sub\r\n",
     )]);
     enable(&mut h);
-    h.state_mut().open_dialog("macros", json!({}));
+    h.state_mut().open_dialog("vbaMacros", json!({}));
     h.run_steps(4);
     assert!(h.query_by_label("Module1.Saludo").is_some(), "the macro is listed");
     h.get_by_label("Run").click();

@@ -81,7 +81,7 @@ Actualizado: 2026-10-30.
 - [x] 2026-10-30: **macros y confianza**: las macros de un libro abierto de archivo no se ejecutan
   por ninguna vía (Alt+F8, botones, CLI, MCP, canal de control) hasta Habilitar contenido o
   `vba.trust` (antes `vba.run`/`vba.click` las ejecutaban sin preguntar). Usa el `Trust` del
-  oficial para saber si el libro viene de archivo. Documentado en `docs/macros.md`.
+  oficial para saber si el libro viene de archivo. Documentado en `docs/vba.md`.
 
 - [x] 2026-10-30: **auditoría de calidad** de lo propio:
   - Macros: anidamiento profundo (paréntesis, `If`, `Not`) cerraba la app → "Expression too

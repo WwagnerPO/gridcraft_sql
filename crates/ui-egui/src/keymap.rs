@@ -250,7 +250,8 @@ fn lookup_alt_shortcuts(ctx: LookupContext) -> Option<Shortcut> {
         F1 if alt => run("insert.chart"),
         F10 if alt && s => Shortcut::Dialog("errorChecking", json!({})),
         // Developer › Macros.
-        F8 if alt && !s => Shortcut::Dialog("macros", json!({})),
+        // Developer › Macros: a workbook's VBA macros first (see `dialogs::ext::open`).
+        F8 if alt && !s => Shortcut::Dialog("macros", json!({"vbaFirst": true})),
         _ => return None,
     })
 }

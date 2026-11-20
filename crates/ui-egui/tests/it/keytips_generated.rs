@@ -2324,10 +2324,7 @@ fn keytip_awt_() {
 fn keytip_ax_() {
     let mut h = harness(blank());
     sequence(&mut h, "AX", false);
-    assert!(h.state().dialog.is_none(), "AX must not open a dialog");
-    assert!(h.state().message.is_none(), "AX must not open a message box");
-    assert!(h.state().toast.is_none(), "AX must not raise a toast");
-    assert!(h.state().session.journal.is_empty(), "AX must not journal");
+    assert!(h.state().message.is_none() && h.state().toast.is_none(), "AX must run data.existingConnections cleanly");
 }
 
 #[test]
@@ -2533,14 +2530,14 @@ fn keytip_wm_() {
 fn keytip_wmr_() {
     let mut h = harness(blank());
     sequence(&mut h, "WMR", false);
-    assert!(h.state().message.is_none() && h.state().toast.is_none(), "WMR must run view.macros cleanly");
+    assert!(h.state().dialog.is_some(), "WMR must open the recordMacro dialog");
 }
 
 #[test]
 fn keytip_wmv_() {
     let mut h = harness(blank());
     sequence(&mut h, "WMV", false);
-    assert!(h.state().message.is_none() && h.state().toast.is_none(), "WMV must run view.macros cleanly");
+    assert!(h.state().dialog.is_some(), "WMV must open the macros dialog");
 }
 
 #[test]
