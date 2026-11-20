@@ -985,12 +985,12 @@ dependencies = [
 [[package]]
 name = "craft-fonts-build"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=c5a1cbfb5f9049f9270955caffb5bee5997aebf7#c5a1cbfb5f9049f9270955caffb5bee5997aebf7"
+source = "git+https://github.com/storytold/craft-libs?rev=1b34eba41e62138fc2438d2734523b302840b45d#1b34eba41e62138fc2438d2734523b302840b45d"
 
 [[package]]
 name = "craft-i18n"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=c5a1cbfb5f9049f9270955caffb5bee5997aebf7#c5a1cbfb5f9049f9270955caffb5bee5997aebf7"
+source = "git+https://github.com/storytold/craft-libs?rev=1b34eba41e62138fc2438d2734523b302840b45d#1b34eba41e62138fc2438d2734523b302840b45d"
 dependencies = [
  "fixed_decimal",
  "icu_decimal",
@@ -1013,7 +1013,7 @@ dependencies = [
 [[package]]
 name = "craft-print"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=c5a1cbfb5f9049f9270955caffb5bee5997aebf7#c5a1cbfb5f9049f9270955caffb5bee5997aebf7"
+source = "git+https://github.com/storytold/craft-libs?rev=1b34eba41e62138fc2438d2734523b302840b45d#1b34eba41e62138fc2438d2734523b302840b45d"
 dependencies = [
  "craft-winprint-gdi",
  "log",
@@ -1027,7 +1027,7 @@ dependencies = [
 [[package]]
 name = "craft-ui"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=c5a1cbfb5f9049f9270955caffb5bee5997aebf7#c5a1cbfb5f9049f9270955caffb5bee5997aebf7"
+source = "git+https://github.com/storytold/craft-libs?rev=1b34eba41e62138fc2438d2734523b302840b45d#1b34eba41e62138fc2438d2734523b302840b45d"
 dependencies = [
  "craft-fonts-build",
  "craft-i18n",
@@ -1047,7 +1047,7 @@ dependencies = [
 [[package]]
 name = "craft-update"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=c5a1cbfb5f9049f9270955caffb5bee5997aebf7#c5a1cbfb5f9049f9270955caffb5bee5997aebf7"
+source = "git+https://github.com/storytold/craft-libs?rev=1b34eba41e62138fc2438d2734523b302840b45d#1b34eba41e62138fc2438d2734523b302840b45d"
 dependencies = [
  "chrono",
  "dunce",
@@ -1071,9 +1071,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "craft-web-api"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=fd5e2feff6ea25bed371a99cc732b3968d621505#fd5e2feff6ea25bed371a99cc732b3968d621505"
+dependencies = [
+ "js-sys",
+ "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+]
+
+[[package]]
 name = "craft-web-host"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=2e2312ddaf21bc3d85cd3395d0955c7d239306f6#2e2312ddaf21bc3d85cd3395d0955c7d239306f6"
+source = "git+https://github.com/storytold/craft-libs?rev=fd5e2feff6ea25bed371a99cc732b3968d621505#fd5e2feff6ea25bed371a99cc732b3968d621505"
 dependencies = [
  "wasm-bindgen",
  "web-sys",
@@ -1082,7 +1093,7 @@ dependencies = [
 [[package]]
 name = "craft-window"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=c5a1cbfb5f9049f9270955caffb5bee5997aebf7#c5a1cbfb5f9049f9270955caffb5bee5997aebf7"
+source = "git+https://github.com/storytold/craft-libs?rev=1b34eba41e62138fc2438d2734523b302840b45d#1b34eba41e62138fc2438d2734523b302840b45d"
 dependencies = [
  "egui",
  "objc2 0.6.5",
@@ -1093,7 +1104,7 @@ dependencies = [
 [[package]]
 name = "craft-winprint-gdi"
 version = "0.1.0"
-source = "git+https://github.com/storytold/winprint.rs?rev=417ac3c4d14d3da5485a99c7d5ce8f05664ec312#417ac3c4d14d3da5485a99c7d5ce8f05664ec312"
+source = "git+https://github.com/storytold/winprint.rs?rev=64e7afd4d1483512385012c340ecaaaf0f3beb7f#64e7afd4d1483512385012c340ecaaaf0f3beb7f"
 dependencies = [
  "windows-sys 0.61.2",
 ]
@@ -2114,7 +2125,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "arboard",
  "chrono",
@@ -2143,7 +2154,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-calc"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "gridcraft-core",
  "gridcraft-formula",
@@ -2155,7 +2166,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-chart"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "gridcraft-calc",
  "gridcraft-core",
@@ -2166,7 +2177,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-cli"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "gridcraft-engine",
  "gridcraft-mcp",
@@ -2179,7 +2190,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-core"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "chrono",
  "js-sys",
@@ -2190,7 +2201,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-engine"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "gridcraft-calc",
  "gridcraft-chart",
@@ -2214,7 +2225,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-formula"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "gridcraft-core",
  "serde",
@@ -2223,7 +2234,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-functions"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "gridcraft-core",
  "regex",
@@ -2231,7 +2242,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-math"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "ratex-font",
  "ratex-layout",
@@ -2241,7 +2252,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-mcp"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "gridcraft-engine",
  "log",
@@ -2250,7 +2261,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-model"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "gridcraft-core",
  "gridcraft-formula",
@@ -2263,18 +2274,18 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-numfmt"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "gridcraft-core",
 ]
 
 [[package]]
 name = "gridcraft-pdf"
-version = "0.17.0"
+version = "0.18.0"
 
 [[package]]
 name = "gridcraft-sqlserver"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "futures-util",
  "gridcraft-engine",
@@ -2286,7 +2297,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-ui-egui"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "craft-ui",
  "craft-update",
@@ -2312,7 +2323,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-vba"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "gridcraft-core",
  "gridcraft-numfmt",
@@ -2320,8 +2331,9 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-web"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
+ "craft-web-api",
  "craft-web-host",
  "eframe",
  "egui",
@@ -2338,7 +2350,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-xlsx"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "aes",
  "gridcraft-core",
@@ -6895,7 +6907,7 @@ dependencies = [
 [[package]]
 name = "winprint"
 version = "0.2.1"
-source = "git+https://github.com/storytold/winprint.rs?rev=5f80b9baf6b58937c401656634e42d33f00ddf49#5f80b9baf6b58937c401656634e42d33f00ddf49"
+source = "git+https://github.com/storytold/winprint.rs?rev=51934db382f225454cf152a8657eb03789be63c4#51934db382f225454cf152a8657eb03789be63c4"
 dependencies = [
  "flate2",
  "fmt-derive",
@@ -7084,7 +7096,7 @@ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "xtask"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "gridcraft-engine",
  "serde_json",
@@ -7356,7 +7368,6 @@ dependencies = [
  "nix",
  "typed-path",
  "windows-sys 0.61.2",
- "zopfli",
 ]
 
 [[package]]
