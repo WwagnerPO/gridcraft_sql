@@ -108,9 +108,10 @@ new repository), don't cherry-pick 40 commits one by one; carry the result inste
 ## Open TODOs
 
 - **TODO** Report the two upstream bugs above to `storytold/gridcraft`.
-- **TODO** The ArtCraft brand files in `docs/brand/` are still in the repository (only the README
-  stopped showing them). Their licence asks forks to remove them; `xtask/src/assets.rs` checks
-  them, so removing them needs that check (and `ATTRIBUTION.md`) adjusted. Decide and do it.
+- The ArtCraft brand files (upstream's `docs/brand/`) are removed, as their licence asks forks;
+  `xtask assets` no longer lists that directory. When merging upstream, keep them deleted (a
+  modify/delete conflict there resolves to delete). The About window and the Windows installer
+  still name ArtCraft (links, `ArtCraft` Start menu folder): see `PENDIENTES.md`.
 - **TODO** Upstream `main` is past v0.19.1; the next sync is the next upstream minor release.
 - Upstream v0.14.2 left `crates/engine/src/cmd/insert/*.rs` uncompiled (no `mod` line): not the
   fork's doing, nothing to fix here, but don't put hooks there.

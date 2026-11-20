@@ -52,14 +52,18 @@ Actualizado: 2026-10-30.
   - Avisos sin vulnerabilidad: `tokio` (`AsyncFd`, no lo usamos; llega por `tiberius`),
     `rand` 0.7, `proc-macro-error`, `zbus_names`/`zvariant` (sin mantenimiento).
 - [ ] `cargo deny` (licencias: nada GPL) — no instalado aún.
-- [ ] Quitar del repo los ficheros de marca ArtCraft (`docs/brand/`): su licencia lo pide a los forks
-  (ver `FORK-NOTES.md`).
+- [ ] **Marca ArtCraft en la app**: la ventana Acerca de ("Part of ArtCraft", enlaces a
+  getartcraft.com y Discord), el menú Ayuda y el instalador de Windows (carpeta `ArtCraft` del menú
+  Inicio, enlaces) aún la usan. Su licencia pide que un fork no se presente como producto ArtCraft.
 
 ## Descartado
 
 - Iniciar sesión con Microsoft Entra (cuentas de Azure): no se hará (2026-10-30).
 
 ## Hecho
+
+- [x] 2026-11-20: **quitados los ficheros de marca ArtCraft** (`docs/brand/`), `xtask assets`,
+  `ATTRIBUTION.md` y README ajustados.
 
 - [x] 2026-11-20: **sincronizado con el oficial hasta v0.19.1** (rama `feat/merge-upstream-0.19.1`,
   un merge por versión, `cargo xtask ci` verde en cada uno). VBA sigue aparte del motor de macros
