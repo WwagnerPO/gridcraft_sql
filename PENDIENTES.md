@@ -7,7 +7,7 @@ Actualizado: 2026-10-30.
 
 ## Integración con el oficial
 
-- [ ] **Sincronizar con el oficial**: el 2026-10-30 lleva 239 commits nuevos.
+- [ ] **Sincronizar con el oficial**: siguiente minor tras v0.19.1 (ver `FORK-NOTES.md`).
 - [ ] **Avisar al oficial** (`storytold/gridcraft`) de dos fallos suyos arreglados aquí: `AHORA()`/`HOY()`
   en UTC en vez de hora local (`core/src/date.rs`, `calc/src/recalc.rs` `now_serial`), y la pérdida
   del `codeName` de las hojas al guardar (`xlsx/src/sheet_write.rs`).
@@ -52,15 +52,20 @@ Actualizado: 2026-10-30.
   - Avisos sin vulnerabilidad: `tokio` (`AsyncFd`, no lo usamos; llega por `tiberius`),
     `rand` 0.7, `proc-macro-error`, `zbus_names`/`zvariant` (sin mantenimiento).
 - [ ] `cargo deny` (licencias: nada GPL) — no instalado aún.
-- [ ] Los 2 tests de UI que fallan sin fuentes (`interaction::column_autocomplete_folds_case_beyond_ascii`,
-  `interaction::language_switch_renders_the_ribbon_and_persists`): pasar con `CRAFT_FONTS_DIR` en la
-  máquina de desarrollo para confirmar que son solo del entorno.
+- [ ] Quitar del repo los ficheros de marca ArtCraft (`docs/brand/`): su licencia lo pide a los forks
+  (ver `FORK-NOTES.md`).
 
 ## Descartado
 
 - Iniciar sesión con Microsoft Entra (cuentas de Azure): no se hará (2026-10-30).
 
 ## Hecho
+
+- [x] 2026-11-20: **sincronizado con el oficial hasta v0.19.1** (rama `feat/merge-upstream-0.19.1`,
+  un merge por versión, `cargo xtask ci` verde en cada uno). VBA sigue aparte del motor de macros
+  oficial; los botones VBA ahora usan los controles de formulario del oficial (se habían roto en
+  0.17). Los 2 tests de UI "de fuentes" pasan con `CRAFT_FONTS_DIR` → eran solo del entorno.
+  README, CHANGELOG y FORK-NOTES nuevos.
 
 - [x] 2026-10-30: **`AHORA()`, `HOY()` y la hora local**: el oficial usaba la hora UTC para
   `AHORA()`/`HOY()`, Ctrl+; / Ctrl+Mayús+;, el formato condicional "hoy", la fecha de los
