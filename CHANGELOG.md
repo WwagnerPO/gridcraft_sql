@@ -27,6 +27,7 @@ release the fork is based on.
   no longer compiles; moved where they run.
 
 ### Removed
+- The ArtCraft brand files (`docs/brand/`): their licence asks forks to remove them.
 - The fork's own reader and painter of VML form buttons (`xlsx/form_controls.rs`,
   `ui-egui/controls.rs` painting): upstream reads and draws them.
 
