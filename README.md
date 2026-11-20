@@ -1,70 +1,118 @@
 <p align="center">
-  <a href="https://getartcraft.com/">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/brand/artcraft-logo-white.svg">
-      <img alt="ArtCraft" src="docs/brand/artcraft-logo.svg" width="200">
-    </picture>
-  </a>
-</p>
-
-<p align="center">
   <img src="assets/app-icon/hicolor/256x256/apps/ai.storyteller.gridcraft.png" width="128" height="128" alt="GridCraft icon: a spreadsheet page on a green tile">
 </p>
 
-<h1 align="center">GridCraft</h1>
+<h1 align="center">GridCraft SQL+VBA — fork de GridCraft</h1>
 
 <p align="center">
-  <b>Spreadsheets and data; an open-source, high-performance modern spreadsheet application, built in pure Rust.</b>
-</p>
-
-<p align="center">
-  A fast, open-source, clean-room take on modern spreadsheet workflows. It runs natively on macOS,
-  Windows, Linux and BSD, and in the browser via WebAssembly.<br>
-  <i>By the ArtCraft team.</i>
-</p>
-
-<p align="center">
-  <img alt="Written in Rust" src="https://img.shields.io/badge/written%20in-Rust-147a40?style=flat-square&logo=rust&logoColor=white">
-  <img alt="Runs on macOS, Windows, Linux, BSD and the web" src="https://img.shields.io/badge/runs%20on-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux%20%C2%B7%20BSD%20%C2%B7%20Web-1f9d55?style=flat-square">
+  <img alt="Upstream base: GridCraft v0.19.1" src="https://img.shields.io/badge/upstream%20base-v0.19.1-147a40?style=flat-square">
+  <img alt="Last upstream sync: 2026-11-20" src="https://img.shields.io/badge/last%20sync-2026--11--20-1f9d55?style=flat-square">
   <img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-147a40?style=flat-square">
-  <img alt="Agent-drivable over MCP" src="https://img.shields.io/badge/agents-MCP-1f9d55?style=flat-square">
-  <br>
-  <a href="https://sonarcloud.io/project/overview?id=storytold_gridcraft"><img alt="Scanned by SonarCloud" src="https://img.shields.io/badge/Scanned_by-SonarCloud-4b9fd5?style=flat-square&logo=sonarqubecloud&logoColor=white"></a>
-  <a href="https://coderabbit.ai"><img alt="Reviewed by CodeRabbit" src="https://img.shields.io/coderabbit/prs/github/storytold/gridcraft?style=flat-square&label=Reviewed%20by%20CodeRabbit&logo=coderabbit"></a>
 </p>
+
+> [!IMPORTANT]
+> Este repositorio es un fork de [storytold/gridcraft](https://github.com/storytold/gridcraft)
+> con dos añadidos: conexiones nativas a SQL Server y soporte VBA extendido (eventos de hoja y
+> E/S de archivos de texto). Si solo quieres GridCraft vanilla, usa el
+> [upstream](https://github.com/storytold/gridcraft).
 
 <p align="center">
-  <a href="https://discord.gg/artcraft"><img alt="Join the ArtCraft community on Discord" src="https://img.shields.io/badge/Join%20us%20on%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" height="40"></a>
+  <a href="#what-this-fork-adds">What this fork adds</a> ·
+  <a href="#upstream-sync">Upstream sync</a> ·
+  <a href="#a-look-around">A look around</a> ·
+  <a href="#why-gridcraft">Why GridCraft</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#for-agents-mcp-cli-and-the-control-channel">For agents</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#downloads">Downloads</a> ·
+  <a href="#license-and-credits">License and credits</a>
 </p>
-
-<p align="center">
-  <a href="https://getartcraft.com/apps/gridcraft"><b>GridCraft on getartcraft.com</b></a> ·
-  <a href="https://getartcraft.com/">ArtCraft</a> ·
-  <a href="https://getartcraft.com/apps">All Crafting Apps</a>
-</p>
-
-<br>
 
 <p align="center">
   <img src="docs/images/hero-sales.png" alt="GridCraft showing a quarterly sales dashboard: a styled table with banded rows, filter buttons, a totals row, data bars, arrow icons and sparklines, next to a clustered column chart and a pie chart" width="100%">
   <br><sub><b>Quarterly Sales Dashboard</b>: a table with a totals row, conditional formatting, sparklines and two live charts — built entirely from GridCraft commands (<code>File → New → Sample</code>).</sub>
 </p>
 
-> [!NOTE]
-> **ArtCraft is a community of artists from all walks of life.** Painters, photographers,
-> filmmakers, illustrators, designers, animators, hobbyists, and people who picked up a pencil
-> last week. If you make things, you're one of us. **[Come say hi on Discord](https://discord.gg/artcraft).**
+## What this fork adds
 
-<p align="center">
-  <a href="#a-look-around">A look around</a> ·
-  <a href="#why-gridcraft">Why GridCraft</a> ·
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#for-agents-mcp-cli-and-the-control-channel">For agents</a> ·
-  <a href="#architecture">Architecture</a> ·
-  <a href="#roadmap">Roadmap</a> ·
-  <a href="#the-crafting-apps">The Crafting Apps</a> ·
-  <a href="#license-and-credits">License and credits</a>
-</p>
+Everything below is in this fork only; the rest of this README is upstream GridCraft's.
+Details: [`docs/sql-server.md`](docs/sql-server.md), [`docs/vba.md`](docs/vba.md),
+[`CHANGELOG.md`](CHANGELOG.md), [`FORK-NOTES.md`](FORK-NOTES.md).
+
+### SQL Server connections
+
+- **Get Data › From SQL Server Database**: a Navigator over databases, tables and views, or a SQL
+  statement with a preview; each loads into a worksheet table bound to a refreshable query.
+  Speaks SQL Server's protocol (TDS) directly: no ODBC driver or system library to install.
+- **Refresh** one query or **Refresh All**, refresh on open or every N minutes; queries are saved
+  in the XLSX as Excel's OLE DB connections, and Excel's Power Query queries that only read SQL
+  Server open as refreshable queries.
+- **Connections saved on this computer** as Office Data Connection files (`.odc`) in
+  `Documents/My Data Sources`, like Excel's: **Export Connection File** saves a query's
+  connection (never its password), **Get Data › Existing Connections** lists them and opens one
+  in any workbook. `.odc` files Excel writes for SQL Server open too.
+- **Write back**: Save Changes to Database, Export to SQL Server, Run SQL.
+- **Sign-in**: SQL Server logins; on Windows also the current Windows user or another Windows
+  account. Logins can be remembered in the system's credential store, never in the workbook.
+
+Not included (yet): a Power Query editor (filtering, merging or changing types before loading;
+a SQL statement is the way to shape data), DAX / Data Model, two-way sync (writes are explicit
+commands), Microsoft Entra sign-in, queries running in the background, other database engines.
+
+```sh
+gridcraft-cli run --cmd 'data.fromSqlServer={"server":"db.example,1433","database":"Shop","table":"dbo.Customers","user":"reader","password":"…"}' \
+                  --cmd 'data.exportConnectionFile={}' --out customers.xlsx
+gridcraft-cli run --cmd 'data.existingConnections={}'
+gridcraft-cli run --cmd 'data.fromConnectionFile={"path":"…/My Data Sources/db.example,1433 Shop Customers.odc","user":"reader","password":"…"}' --out again.xlsx
+```
+
+The same commands reach MCP and the control channel.
+
+### VBA support
+
+Upstream GridCraft carries a workbook's VBA project without running it (its own macros are
+command lists, see [`docs/macros.md`](docs/macros.md)). This fork adds a clean-room VBA
+interpreter with an Excel object model (`Range`, `Cells`, `Worksheets`, `Application`, `MsgBox`,
+`InputBox`, `Shapes`, `ADODB.Stream`…):
+
+- **Run macros**: Alt+F8, form buttons (`Application.Caller` is the button), `vba.run`.
+- **Events**: `Workbook_Open` on Enable Content, `Worksheet_Change` and `Workbook_SheetChange`
+  when cells change.
+- **Sheet code names** (`<sheetPr codeName>`) survive an XLSX round trip, so each sheet keeps its
+  VBA module.
+- **Text files**: `Open … For Input | Output | Append`, `Print #`, `Write #`, `Input #`,
+  `Line Input #`, `Close`, `EOF`, `LOF`, `FreeFile`.
+- Runs only after the macros are enabled (see Security defaults).
+
+Not supported: a full VBA editor (the code is run and kept, not edited), UserForms, COM/ActiveX
+controls and `CreateObject` beyond the few objects above, `Declare` (Windows API calls) and
+anything else Windows-only, binary and random files, `GoSub` and `AddressOf`, and events other
+than the three above. Context upstream: [storytold/gridcraft#1143](https://github.com/storytold/gridcraft/issues/1143)
+(native VBA macro support).
+
+### Security defaults
+
+- **Macros are off** in any workbook opened from a file (or holding content pasted from one):
+  Alt+F8, form buttons, events, `vba.run`, `vba.click`, `control.press`, the CLI, MCP and the
+  control channel all refuse until **Enable Content** in the security bar, `vba.trust`, or
+  `trusted: true` on the call. A workbook made in the session may run its own macros.
+- **Hostile code stops, the app doesn't**: nesting past 128 levels is "Expression too complex",
+  runaway recursion "Out of stack space" (macros run on their own 64 MB thread), strings past
+  64M characters and arrays past 16M elements "Out of memory", and a run past 500 million steps
+  is stopped. A failing macro never loses the workbook.
+- Database passwords are never written to workbooks, `.odc` files, the journal or logs.
+
+### Other differences
+
+- `NOW()` and `TODAY()` (and Ctrl+;, "today" conditional formats, the `&[Date]` header field)
+  read the local time, as Excel does; upstream reads UTC.
+
+## Upstream sync
+
+- Based on **GridCraft v0.19.1** (synced 2026-11-20).
+- Policy: each upstream minor release is merged into a branch `feat/merge-upstream-X.Y.Z`, one
+  merge per release, with `cargo xtask ci` green after each, then a pull request to `main`. How,
+  and where the fork hooks into upstream files: [`FORK-NOTES.md`](FORK-NOTES.md), [`FORK.md`](FORK.md).
 
 ## A look around
 
@@ -114,6 +162,16 @@ cargo run --release -p gridcraft -- --sample sales            # open a sample (s
 cargo run --release -p gridcraft -- book.xlsx                 # open a workbook
 cargo run --release -p gridcraft -- --sample sales --control 7979   # + JSON control channel
 cargo xtask ci                                                 # fmt, clippy, tests, assets, layering, wasm
+```
+
+This fork's features from the command line (see [What this fork adds](#what-this-fork-adds)):
+
+```sh
+# Load a SQL Server table, then save its connection in Documents/My Data Sources
+cargo run -p gridcraft-cli -- run --cmd 'data.fromSqlServer={"server":"localhost,1433","database":"Shop","table":"dbo.Customers","user":"sa","password":"…"}' \
+  --cmd 'data.exportConnectionFile={}' --out customers.xlsx
+# Run a VBA macro of a macro-enabled workbook (trusted: enables its macros for this run)
+cargo run -p gridcraft-cli -- run --in book.xlsm --cmd 'vba.run={"macro":"Module1.Main","trusted":true}' --out book.xlsm
 ```
 
 Choose Español under View → Interface language for [Spanish formula names, decimal commas, and semicolon arguments](docs/formula-input.md).
@@ -190,11 +248,11 @@ egui frontend is a separate crate, so the UI can be swapped without touching the
 | Layer | Crates |
 |---|---|
 | L0 | `core` (addresses, values, errors, dates, input parsing) · `numfmt` (number format codes) |
-| L1 | `formula` (lexer, parser, printer, reference adjustment) · `functions` (worksheet function library) |
+| L1 | `formula` (lexer, parser, printer, reference adjustment) · `functions` (worksheet function library) · `vba` (fork: VBA lexer, parser and interpreter, no object model) |
 | L2 | `model` (workbook, sheets, copy-on-write cells, styles, tables, charts…) · `calc` (dependency graph, evaluator, dynamic arrays) · `xlsx` (XLSX, CSV, plus XLSB and ODS data import) |
 | L3 | `chart` (toolkit-free chart layout and rendering) |
 | L5 | `engine` (session, commands, history, clipboard, fill, sort, filter, file I/O) |
-| L6 | `ui-egui` (spreadsheet UI, control channel) · `mcp` (MCP server) |
+| L6 | `ui-egui` (spreadsheet UI, control channel) · `mcp` (MCP server) · `sqlserver` (fork: SQL Server provider over TDS) |
 | L7 | `apps/gridcraft`, `apps/gridcraft-cli`, `apps/gridcraft-web` |
 
 - **Contributor and agent rules** (clean-room, asset policy, never-crash, quality gates): [`AGENTS.md`](AGENTS.md)
@@ -212,6 +270,13 @@ workbooks and multi-threaded recalc, chart depth, text in every script, and `.xl
 numbers and estimates are in [ROADMAP.md](ROADMAP.md); the ranked work list is [`docs/gaps.md`](docs/gaps.md).
 
 ## Downloads
+
+> [!NOTE]
+> **This fork** publishes only a Windows installer, **GridCraft SQL** (`.msi`, installs next to
+> upstream GridCraft), built by [`fork-windows.yml`](.github/workflows/fork-windows.yml) from
+> `v*-sql*` tags on [this repository's releases](https://github.com/WwagnerPO/gridcraft_sql/releases).
+> On other platforms build from source (Quick start). The downloads below are upstream's vanilla
+> GridCraft, without this fork's features.
 
 **Download GridCraft** from GitHub: the [latest release](https://github.com/storytold/gridcraft/releases/latest) has every build listed below, and [all releases](https://github.com/storytold/gridcraft/releases) has earlier versions and their notes. `<ver>` in the file names is the version number, and `SHA256SUMS.txt` lists a checksum for every file.
 
@@ -298,7 +363,15 @@ stand on its own.
 | <img src="https://raw.githubusercontent.com/storytold/pdfcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.pdfcraft.png" alt="" width="32" height="32"> | **PdfCraft** | Reading, organizing and protecting PDFs | [GitHub](https://github.com/storytold/pdfcraft) | [Website](https://getartcraft.com/apps/pdfcraft) |
 | <img src="https://raw.githubusercontent.com/storytold/effectcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.effectcraft.png" alt="" width="32" height="32"> | **EffectCraft** | Motion graphics and visual effects | [GitHub](https://github.com/storytold/effectcraft) | [Website](https://getartcraft.com/apps/effectcraft) |
 | <img src="https://raw.githubusercontent.com/storytold/designcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.designcraft.png" alt="" width="32" height="32"> | **DesignCraft** | Page layout and publishing | [GitHub](https://github.com/storytold/designcraft) | [Website](https://getartcraft.com/apps/designcraft) |
-| <img src="https://raw.githubusercontent.com/storytold/gridcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.gridcraft.png" alt="" width="32" height="32"> | **GridCraft** | **Spreadsheets and data · you are here** | [GitHub](https://github.com/storytold/gridcraft) | [Website](https://getartcraft.com/apps/gridcraft) |
+| <img src="https://raw.githubusercontent.com/storytold/figcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.figcraft.png" alt="" width="32" height="32"> | **FigCraft** | Interface design and prototyping | [GitHub](https://github.com/storytold/figcraft) | [Website](https://getartcraft.com/apps/figcraft) |
+| <img src="https://raw.githubusercontent.com/storytold/wordcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.wordcraft.png" alt="" width="32" height="32"> | **WordCraft** | Word processing and documents | [GitHub](https://github.com/storytold/wordcraft) | [Website](https://getartcraft.com/apps/wordcraft) |
+| <img src="https://raw.githubusercontent.com/storytold/soundcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.soundcraft.png" alt="" width="32" height="32"> | **SoundCraft** | Audio recording and editing | [GitHub](https://github.com/storytold/soundcraft) | [Website](https://getartcraft.com/apps/soundcraft) |
+| <img src="https://raw.githubusercontent.com/storytold/deckcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.deckcraft.png" alt="" width="32" height="32"> | **DeckCraft** | Presentations and slide decks | [GitHub](https://github.com/storytold/deckcraft) | [Website](https://getartcraft.com/apps/deckcraft) |
+| <img src="https://raw.githubusercontent.com/storytold/cadcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.cadcraft.png" alt="" width="32" height="32"> | **CADCraft** | Computer-aided design | [GitHub](https://github.com/storytold/cadcraft) | [Website](https://getartcraft.com/apps/cadcraft) |
+| <img src="https://raw.githubusercontent.com/storytold/gridcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.gridcraft.png" alt="" width="32" height="32"> | **GridCraft** | Spreadsheets and data | [GitHub](https://github.com/storytold/gridcraft) | [Website](https://getartcraft.com/apps/gridcraft) |
+| <img src="https://raw.githubusercontent.com/storytold/texturecraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.texturecraft.png" alt="" width="32" height="32"> | **TextureCraft** | 3D texture painting | [GitHub](https://github.com/storytold/texturecraft) | [Website](https://getartcraft.com/apps/texturecraft) |
+| <img src="https://raw.githubusercontent.com/storytold/craft-anything/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.craft-anything.png" alt="" width="32" height="32"> | **Craft Anything** | See how any software works, then build your own | [GitHub](https://github.com/storytold/craft-anything) | [Website](https://getartcraft.com/apps/craft-anything) |
+| <img src="https://raw.githubusercontent.com/tangency-labs/solidcraft/main/assets/icons/app/linux/exports/hicolor/64x64/apps/io.tangencylabs.solidcraft.png" alt="" width="32" height="32"> | **SolidCraft** | Parametric 3D CAD by Tangency Labs (community app) | [GitHub](https://github.com/tangency-labs/solidcraft) | |
 
 And [**ArtCraft**](https://getartcraft.com/) itself, our AI image and video studio for artists who want real control.
 
@@ -344,6 +417,5 @@ Forks and modified versions must remove them.
 <br>
 
 <p align="center">
-  <a href="https://getartcraft.com/"><img alt="ArtCraft" src="docs/brand/artcraft-mark.svg" width="28"></a><br>
   <sub>Made by the <a href="https://getartcraft.com/">ArtCraft</a> team and community.</sub>
 </p>

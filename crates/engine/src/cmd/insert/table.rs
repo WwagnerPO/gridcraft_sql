@@ -60,7 +60,7 @@ pub(super) fn insert_table(s: &mut Session, p: &Json) -> Result<Json> {
             let e = Edit::InsertCells { axis: Axis::Rows, range: RangeRef::new(r.start, CellRef::new(r.start.row, r.end.col)) };
             shift_cell_features(sh, &e);
             let name = sh.name.clone();
-            rewrite(&mut cx.wb, &name, &e);
+            rewrite(cx, &name, &e)?;
             let sh = cx.sheet_mut(sheet)?;
             for (i, c) in (r.start.col..=r.end.col).enumerate() {
                 sh.set_value(CellRef::new(r.start.row, c), gridcraft_core::Value::text(format!("Column{}", i + 1)));
@@ -285,10 +285,6 @@ pub(super) fn table_rename(s: &mut Session, p: &Json) -> Result<Json> {
         if let Some(t) = cx.sheet_mut(si)?.tables.get_mut(ti) {
             t.name = name.clone();
         }
-        // A query keeps loading into its table.
-        for c in cx.wb.connections.iter_mut().filter(|c| c.table.eq_ignore_ascii_case(&old)) {
-            c.table = name.clone();
-        }
         // Structured references follow the rename.
         for i in 0..cx.wb.sheets.len() {
             let keys: Vec<(CellRef, std::sync::Arc<Formula>)> =
@@ -332,8 +328,6 @@ pub(super) fn table_convert(s: &mut Session, p: &Json) -> Result<Json> {
         if let Some(sh) = wb.sheet_mut(si) {
             sh.tables.remove(ti);
         }
-        // A range has no query: its connection goes with the table.
-        wb.connections.retain(|c| !c.table.eq_ignore_ascii_case(&t.name));
         cx.structural = true;
         Ok(Json::Null)
     })

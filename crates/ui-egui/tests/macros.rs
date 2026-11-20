@@ -62,7 +62,7 @@ fn run_from_the_dialog_and_answer_a_message_box() {
         "Attribute VB_Name = \"Module1\"\r\nSub Saludo()\r\n    If MsgBox(\"¿Escribir?\", vbYesNo) = vbYes Then Range(\"A1\").Value = \"sí\" Else Range(\"A1\").Value = \"no\"\r\n    Range(\"A2\").Value = 42\r\nEnd Sub\r\n",
     )]);
     enable(&mut h);
-    h.state_mut().open_dialog("macros", json!({}));
+    h.state_mut().open_dialog("vbaMacros", json!({}));
     h.run_steps(4);
     assert!(h.query_by_label("Module1.Saludo").is_some(), "the macro is listed");
     h.get_by_label("Run").click();
@@ -161,12 +161,8 @@ fn the_open_message_leaves_macros_to_the_security_bar() {
 /// A sheet with a form button running `Mark`: click it on screen.
 fn button_harness() -> Harness {
     let mut h = harness(&[("Module1", true, "Sub Mark()\r\n    Range(\"A1\").Value = Application.Caller\r\nEnd Sub\r\n")]);
-    let p = gridcraft_xlsx::form_controls::sample_preserved(&[(1025, "Button 1", "Run me", "Mark", [2, 0, 3, 0, 4, 0, 5, 0])]);
-    {
-        let s = &mut h.state_mut().session;
-        let wb = std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().wb);
-        wb.sheet_mut(0).unwrap().preserved = Some(std::sync::Arc::new(p));
-    }
+    // A form button over C4:E6 running the VBA macro Mark (upstream's form controls).
+    h.state_mut().session.execute("insert.button", json!({"at": "C4", "width": 150, "height": 40, "text": "Run me", "macro": "Mark"})).unwrap();
     h.run_steps(3);
     h
 }

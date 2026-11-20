@@ -9,7 +9,7 @@ use super::Field::*;
 use crate::SheetApp;
 
 /// The dialogs drawn here.
-const NAMES: &[&str] = &["sqlServer", "existingConnections", "dataSourceSettings", "saveToDatabase", "exportToSqlServer", "sqlExecute", "macros"];
+const NAMES: &[&str] = &["sqlServer", "existingConnections", "dataSourceSettings", "saveToDatabase", "exportToSqlServer", "sqlExecute", "vbaMacros"];
 
 impl Dialog {
     /// The sign-in step of the SQL Server dialog on its own: Refresh asks for a login with it,
@@ -23,16 +23,20 @@ impl Dialog {
     }
 }
 
+/// Whether the active workbook carries a VBA project.
+fn has_vba(app: &SheetApp) -> bool {
+    app.session.active().is_some_and(|d| d.wb.vba_project.is_some())
+}
+
 /// Opens dialog `name` when it is one of these: `Some(dialog)` (`Some(None)` when it can't open,
 /// after saying why); `None` for every other dialog.
 pub(super) fn open(app: &mut SheetApp, name: &str, params: &Json) -> Option<Option<Dialog>> {
     let p = |k: &str| params.get(k).and_then(Json::as_str).unwrap_or("").to_string();
     Some(match name {
-        "macros" => {
-            let mut d = Dialog::custom("macros", "Macro", json!({}));
-            // What `view.macros` lists (recorded scripts, the VBA project), as the upstream dialog.
-            d.result = app.session.run("view.macros", json!({})).ok();
-            Some(d)
+        // Alt+F8 (`vbaFirst`) in a workbook with a VBA project lists its VBA macros, as Excel
+        // does; every other way to Macros opens GridCraft's macro list.
+        "macros" | "vbaMacros" if name == "vbaMacros" || (params.get("vbaFirst") == Some(&Json::Bool(true)) && has_vba(app)) => {
+            Some(Dialog::custom("vbaMacros", "Macro", json!({})))
         }
         "sqlServer" => Some(Dialog::custom(
             "sqlServer",
@@ -115,7 +119,7 @@ pub(super) fn show(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open: 
         "saveToDatabase" => crate::get_data::save_to_database(app, ui, d, open),
         "exportToSqlServer" => crate::get_data::export_to_sql_server(app, ui, d, open),
         "sqlExecute" => crate::get_data::run_sql(app, ui, d, open),
-        "macros" => crate::macros::dialog(app, ui, d, open),
+        "vbaMacros" => crate::macros::dialog(app, ui, d, open),
         _ => {}
     }
 }

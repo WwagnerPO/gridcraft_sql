@@ -17,11 +17,83 @@ use serde_json::{Value as Json, json};
 
 use crate::Session;
 
-pub use gridcraft_xlsx::form_controls::FormButton;
+/// A form button and the macro it runs, as the VBA object model sees it (`Shapes`, `Buttons`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormButton {
+    /// The form control's id.
+    pub shape_id: u32,
+    /// "Button 1": the name `Application.Caller` and `Shapes("…")` use.
+    pub name: String,
+    pub caption: String,
+    /// The assigned macro; empty for none.
+    pub macro_name: String,
+    /// As Excel's VML `x:Anchor`: left column, left offset (px), top row, top offset, right
+    /// column, right offset, bottom row, bottom offset. Zero-based cells.
+    pub anchor: [u32; 8],
+}
 
-/// The form-control buttons of a sheet (Developer › Insert › Button).
+/// The form-control buttons of a sheet (Developer › Insert › Button), from the form controls
+/// GridCraft reads (`Sheet::controls`, upstream since 0.17): `shape_id` is the control's id and
+/// `macro_name` the macro it runs, if any.
 pub fn sheet_buttons(sh: &gridcraft_model::Sheet) -> Vec<FormButton> {
-    sh.preserved.as_deref().map(gridcraft_xlsx::form_controls::buttons).unwrap_or_default()
+    use gridcraft_model::{ControlAction, ControlKind};
+    sh.controls
+        .iter()
+        .filter(|c| c.kind == ControlKind::Button)
+        .map(|c| {
+            let macro_name = match &c.action {
+                Some(ControlAction::Macro { name, .. }) => name.clone(),
+                _ => String::new(),
+            };
+            FormButton { shape_id: c.id, name: c.display_name(), caption: c.text.clone(), macro_name, anchor: anchor_cells(sh, &c.anchor) }
+        })
+        .collect()
+}
+
+/// An object's anchor as Excel's VML `x:Anchor`: left column, offset (px), top row, offset, right
+/// column, offset, bottom row, offset.
+fn anchor_cells(sh: &gridcraft_model::Sheet, a: &gridcraft_model::Anchor) -> [u32; 8] {
+    // Points to 96-dpi pixels.
+    let px = |pt: f64| (pt / 0.75).max(0.0).round() as u32;
+    let left = sh.col_left(a.cell.col) + f64::from(a.dx);
+    let top = sh.row_top(a.cell.row) + f64::from(a.dy);
+    let (right, bottom) = (left + f64::from(a.width), top + f64::from(a.height));
+    let mut c1 = a.cell.col;
+    while c1 + 1 < gridcraft_core::MAX_COLS && sh.col_left(c1 + 1) <= right && c1 < a.cell.col + 1000 {
+        c1 += 1;
+    }
+    let mut r1 = a.cell.row;
+    while r1 + 1 < gridcraft_core::MAX_ROWS && sh.row_top(r1 + 1) <= bottom && r1 < a.cell.row + 10_000 {
+        r1 += 1;
+    }
+    [a.cell.col, px(f64::from(a.dx)), a.cell.row, px(f64::from(a.dy)), c1, px(right - sh.col_left(c1)), r1, px(bottom - sh.row_top(r1))]
+}
+
+/// Whether a button's macro `name` is a VBA macro: the workbook has no GridCraft macro by that
+/// name and its VBA project has the procedure.
+pub fn is_vba_button_macro(s: &Session, name: &str) -> bool {
+    let Ok(d) = s.doc() else { return false };
+    if name.is_empty() || crate::macros::find(&d.wb, name).is_some() {
+        return false;
+    }
+    let Some(bin) = d.wb.vba_project.as_ref() else { return false };
+    let want = name.rsplit('.').next().unwrap_or(name);
+    all_procedures(bin)
+        .is_ok_and(|ps| ps.iter().any(|p| p.eq_ignore_ascii_case(name) || p.rsplit('.').next().is_some_and(|x| x.eq_ignore_ascii_case(want))))
+}
+
+/// `control.press` on a button whose macro is a VBA macro: runs it with `Application.Caller` set
+/// to the button (message boxes answer as `vba.run` does). `None` for any other button.
+pub fn press_button(s: &mut Session, macro_name: &str, button: &str, p: &Json) -> Option<crate::Result<Json>> {
+    if !is_vba_button_macro(s, macro_name) {
+        return None;
+    }
+    let mut ui = crate::cmd::vba::ui_from(p);
+    Some(
+        run_macro_from(s, macro_name, &mut ui, None, Some(button.to_string()))
+            .map(|r| json!({"result": r.to_str().unwrap_or_default(), "messages": ui.messages, "output": ui.output}))
+            .map_err(|e| crate::EngineError::Other(e.to_string())),
+    )
 }
 
 /// What a macro shows the person running it. Macros run on a thread of their own, so it is

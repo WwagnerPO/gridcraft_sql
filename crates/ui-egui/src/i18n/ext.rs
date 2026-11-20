@@ -29,6 +29,7 @@ fn spanish(text: &str) -> Option<&'static str> {
         "Data Source Settings…" => "Configuración de origen de datos…",
         // Connection files (Existing Connections, Export Connection File)
         "Existing Connections…" => "Conexiones existentes…",
+        "GridCraft macros…" => "Macros de GridCraft…",
         "Existing Connections" => "Conexiones existentes",
         "Export Connection File…" => "Exportar archivo de conexión…",
         "Export Connection File" => "Exportar archivo de conexión",

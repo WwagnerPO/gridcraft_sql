@@ -62,10 +62,10 @@ Casi todo vive en archivos **solo nuestros**, que el oficial no tiene y por tant
 | Intérprete VBA | `crates/vba/` |
 | Conector SQL Server | `crates/sqlserver/`, `apps/gridcraft/src/logins.rs`, `apps/gridcraft-cli/src/db.rs` |
 | Modelo | `crates/model/src/connection.rs` |
-| XLSX | `crates/xlsx/src/{connections,mashup,ovba,cfb_write,form_controls}.rs`, `crates/xlsx/src/cfb/streams.rs` |
+| XLSX | `crates/xlsx/src/{connections,mashup,ovba,cfb_write,odc}.rs`, `crates/xlsx/src/cfb/streams.rs` |
 | Motor | `crates/engine/src/{datasource,vba_host}.rs`, `crates/engine/src/vba_host/objects.rs`, `crates/engine/src/cmd/{connections,dbwrite,vba}.rs` |
 | Interfaz | `crates/ui-egui/src/{ext,get_data,macros,controls}.rs`, `crates/ui-egui/src/{dialogs,ribbon,icons,i18n}/…` (`ext.rs`, `database.rs`) |
-| Docs | `docs/sql-server.md`, `docs/macros.md`, `PENDIENTES.md`, este archivo |
+| Docs | `docs/sql-server.md`, `docs/vba.md`, `PENDIENTES.md`, este archivo |
 
 En los archivos **compartidos** sólo hay líneas de enganche (cada una llama a código propio):
 
@@ -93,10 +93,17 @@ En los archivos **compartidos** sólo hay líneas de enganche (cada una llama a 
 | `ui-egui/src/dialogs.rs`, `dialogs/show.rs` | `mod ext;`, `ext::open`, `ext::width`, `ext::owns`/`ext::show` |
 | `ui-egui/src/{ribbon,icons,i18n}.rs`, `ribbon/data.rs` | `mod ext;`/`mod database;` y una línea que les llama |
 | `ui-egui/src/{keymap,panes}.rs` | Alt+F8, panel Consultas y conexiones |
-| `ui-egui/src/grid/show.rs`, `grid/interact.rs` | `ext::paint_controls` (dibujar botones de formulario) y `ext::click_control` (clic en un botón) |
+| `engine/src/cmd/controls.rs` (`press`) | `vba_host::press_button`: un botón cuyo macro es VBA ejecuta el VBA |
+| `ui-egui/src/control_ui.rs` (`press`) | `ext::press_button`: lo mismo en la ventana, con cuadros de mensaje reales |
 | `ui-egui/src/tabs.rs` | estado de las macros en la barra de estado (`ext::macro_status`) |
 | `ui-egui/src/keytips/*`, `tests/keytips_generated.rs` | keytips que dejan de estar "pendientes" |
 | `apps/gridcraft/src/main.rs`, `apps/gridcraft-cli/src/main.rs` | instalar el proveedor SQL Server y el almacén de logins |
+
+**Dos motores de macros.** Desde 0.14 el oficial tiene sus propias macros (listas de comandos,
+`macro.*`, `crates/engine/src/macros/`). Nuestro intérprete VBA (`crates/vba`, `vba_host`, `vba.*`)
+sigue aparte: VBA no se puede expresar como listas de comandos. Comparten el `Trust` del documento.
+El diálogo VBA se llama `vbaMacros` (no `macros`, que es el del oficial); Alt+F8 lo abre si el libro
+tiene proyecto VBA. Detalle en `docs/vba.md`.
 
 **Regla para código nuevo**: escribirlo en archivos propios y tocar los compartidos sólo con
 una línea que lo llame. Las traducciones nuevas van en `ui-egui/src/i18n/ext.rs`, no en las

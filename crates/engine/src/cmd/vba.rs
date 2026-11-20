@@ -63,10 +63,10 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
-fn sheet_buttons(s: &Session, p: &Json) -> Result<(usize, Vec<gridcraft_xlsx::form_controls::FormButton>)> {
+fn sheet_buttons(s: &Session, p: &Json) -> Result<(usize, Vec<crate::vba_host::FormButton>)> {
     let si = target_sheet(s, p)?;
     let d = s.doc()?;
-    let list = d.wb.sheet(si).and_then(|sh| sh.preserved.as_deref()).map(gridcraft_xlsx::form_controls::buttons).unwrap_or_default();
+    let list = d.wb.sheet(si).map(crate::vba_host::sheet_buttons).unwrap_or_default();
     Ok((si, list))
 }
 
@@ -83,7 +83,7 @@ fn buttons(s: &mut Session, p: &Json) -> Result<Json> {
     ))
 }
 
-fn ui_from(p: &Json) -> crate::vba_host::Headless {
+pub(crate) fn ui_from(p: &Json) -> crate::vba_host::Headless {
     let mut ui = crate::vba_host::Headless::default();
     if let Some(a) = p.get("answers").and_then(Json::as_array) {
         ui.answers = a.iter().filter_map(Json::as_i64).collect();
