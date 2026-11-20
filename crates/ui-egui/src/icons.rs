@@ -870,7 +870,7 @@ fn paint_with(p: &Painter, rect: Rect, icon: Icon, c: Color32, pal: &Palette) {
             g.line(&[(4.5, 9.0), (4.5, 14.5), (11.5, 14.5), (11.5, 9.0), (4.5, 9.0)], c, 1.1);
             g.circle(12.3, 7.6, 0.6, Some(c), None);
         }
-        Icon::Database | Icon::Refresh => database::paint(&g, icon),
+        Icon::Database | Icon::Refresh => database::paint(&g, icon, pal),
         Icon::Macro => {
             g.rect(2.5, 1.5, 9.0, 12.0, Some(paper), Some(c));
             for y in [4.5, 7.0, 9.5] {
