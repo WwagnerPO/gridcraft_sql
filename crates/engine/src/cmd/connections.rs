@@ -254,7 +254,7 @@ fn write_rows(cx: &mut Ctx, si: usize, at: CellRef, headers: &[String], r: &Quer
                     }
                 },
             };
-            cx.sheet_mut(si)?.set_cell(c, Cell { value, formula: None, style });
+            cx.sheet_mut(si)?.set_cell(c, Cell { value, formula: None, style, py: None });
         }
     }
     Ok(RangeRef::new(at, CellRef::new(end_row, end_col)))

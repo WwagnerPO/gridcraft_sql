@@ -33,6 +33,8 @@ pub const TABLE: &[(&str, Class)] = &[
     ("functions", Class::Layer(1)),
     // The VBA language (no object model): the engine supplies Excel's objects.
     ("vba", Class::Layer(1)),
+    // Equation layout (LaTeX to glyphs, rules and paths) and OMML, on top of RaTeX.
+    ("math", Class::Layer(1)),
     ("model", Class::Layer(2)),
     ("calc", Class::Layer(2)),
     ("xlsx", Class::Layer(2)),
@@ -62,8 +64,9 @@ fn intra_layer_allowed(from: &str, to: &str) -> bool {
 }
 
 /// Format crates may only depend on these workspace crates (on top of the layer rule), so a
-/// file format never pulls in calculation or engine code.
-pub const FORMAT_ALLOWED: &[(&str, &[&str])] = &[("xlsx", &["core", "formula", "model"])];
+/// file format never pulls in calculation or engine code. `math` converts equations to and from
+/// OMML.
+pub const FORMAT_ALLOWED: &[(&str, &[&str])] = &[("xlsx", &["core", "formula", "math", "model"])];
 
 /// External crates that constitute a UI toolkit / windowing dependency.
 /// Entries ending in `*` are prefixes.
