@@ -98,6 +98,12 @@ En los archivos **compartidos** sólo hay líneas de enganche (cada una llama a 
 | `ui-egui/src/keytips/*`, `tests/keytips_generated.rs` | keytips que dejan de estar "pendientes" |
 | `apps/gridcraft/src/main.rs`, `apps/gridcraft-cli/src/main.rs` | instalar el proveedor SQL Server y el almacén de logins |
 
+**Dos motores de macros.** Desde 0.14 el oficial tiene sus propias macros (listas de comandos,
+`macro.*`, `crates/engine/src/macros/`). Nuestro intérprete VBA (`crates/vba`, `vba_host`, `vba.*`)
+sigue aparte: VBA no se puede expresar como listas de comandos. Comparten el `Trust` del documento.
+El diálogo VBA se llama `vbaMacros` (no `macros`, que es el del oficial); Alt+F8 lo abre si el libro
+tiene proyecto VBA. Detalle en `docs/vba.md`.
+
 **Regla para código nuevo**: escribirlo en archivos propios y tocar los compartidos sólo con
 una línea que lo llame. Las traducciones nuevas van en `ui-egui/src/i18n/ext.rs`, no en las
 tablas de cada idioma; los docs del oficial (`ROADMAP.md`, `docs/gaps.md`…) no se tocan.

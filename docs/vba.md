@@ -7,6 +7,22 @@ GridCraft reads the VBA project of a macro-enabled workbook (`.xlsm`, `vbaProjec
 Excel object model (`Range`, `Cells`, `Worksheets`, `Application`, `MsgBox`, `InputBox`…). The
 project is kept unchanged on save.
 
+## VBA and GridCraft macros
+
+GridCraft (upstream, since 0.14) has its own macros: typed lists of GridCraft commands, recorded
+or edited in Automate › Macros and run with `macro.run` ([macros.md](macros.md)). They are not
+VBA, and upstream carries a workbook's VBA project without running it. This fork adds a VBA
+interpreter beside them; the two engines are separate on purpose:
+
+- VBA is a programming language (variables, loops, functions, objects, events); upstream's macros
+  are declarative command lists with bounded Repeat/If. Neither can be expressed in the other, so
+  "VBA on top of the macro engine" would mean translating VBA into command lists, which only
+  works for straight-line code.
+- They share what can be shared: the workbook's provenance (`Trust`, upstream) decides whether
+  either may run without asking, and both run their changes as one undo step.
+- In the window, Alt+F8 opens the VBA macros of a workbook that has a VBA project, as Excel does
+  (with a button to GridCraft's macros); Automate › Macros and View › Macros open GridCraft's.
+
 ## Security
 
 As in Excel, a workbook opened from a file (or holding content pasted from one) starts with its
