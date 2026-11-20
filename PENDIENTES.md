@@ -12,9 +12,6 @@ Actualizado: 2026-10-30.
   en UTC en vez de hora local (`core/src/date.rs`, `calc/src/recalc.rs` `now_serial`), y la pérdida
   del `codeName` de las hojas al guardar (`xlsx/src/sheet_write.rs`).
 
-- [ ] **Colores de los iconos de base de datos.** El oficial pasó los iconos a la paleta del tema
-  (`Palette`/`Cat`); `icons/database.rs` sigue con verde y azul fijos. Pasarlos a la paleta para el
-  modo oscuro.
 - [ ] **Pasar `cargo xtask ci` completo** (incluye `wasm`) en la máquina de desarrollo tras la
   fusión del 2026-10-29. En la nube se pasaron fmt, clippy, layers, assets y los tests de los
   crates afectados.
@@ -64,6 +61,9 @@ Actualizado: 2026-10-30.
 
 - [x] 2026-11-20: **quitados los ficheros de marca ArtCraft** (`docs/brand/`), `xtask assets`,
   `ATTRIBUTION.md` y README ajustados.
+
+- [x] 2026-11-20: **iconos de base de datos** (Obtener datos, Actualizar todo) con los colores de
+  la paleta del tema: cambian con el modo oscuro.
 
 - [x] 2026-11-20: **sincronizado con el oficial hasta v0.19.1** (rama `feat/merge-upstream-0.19.1`,
   un merge por versión, `cargo xtask ci` verde en cada uno). VBA sigue aparte del motor de macros

@@ -19,6 +19,8 @@ release the fork is based on.
 - The fork's VBA documentation moved from `docs/macros.md` (now upstream's) to `docs/vba.md`.
 
 ### Fixed
+- The database icons (Get Data, Refresh All) used fixed colours; they take the theme's palette
+  and follow dark mode.
 - Form buttons assigned to a VBA macro stopped working after upstream 0.17 read form controls
   itself ("There is no macro called …"); they run again.
 - The SQL Server query's table hooks (rename, convert to range) were in a file upstream 0.14.2
