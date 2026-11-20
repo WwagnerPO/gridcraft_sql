@@ -518,6 +518,9 @@ pub struct Session {
     pub show_all_notes: bool,
     /// Database connections and logins (Get Data › From Database); see [`datasource`].
     pub(crate) data: datasource::SessionData,
+    /// Whether `link.open` may open web and e-mail addresses without the user's confirmation
+    /// (#2181). Host code sets it; no command does.
+    pub link_policy: links::LinkPolicy,
     /// Open undo groups, innermost last.
     groups: Vec<OpenGroup>,
     next_group: u64,
