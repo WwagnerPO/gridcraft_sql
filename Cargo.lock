@@ -231,7 +231,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
  "wl-clipboard-rs",
  "x11rb",
 ]
@@ -964,12 +964,12 @@ dependencies = [
 [[package]]
 name = "craft-fonts-build"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=92d392cff132eaf53e13afff77f38b5c11b73aa0#92d392cff132eaf53e13afff77f38b5c11b73aa0"
+source = "git+https://github.com/storytold/craft-libs?rev=c5a1cbfb5f9049f9270955caffb5bee5997aebf7#c5a1cbfb5f9049f9270955caffb5bee5997aebf7"
 
 [[package]]
 name = "craft-i18n"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=92d392cff132eaf53e13afff77f38b5c11b73aa0#92d392cff132eaf53e13afff77f38b5c11b73aa0"
+source = "git+https://github.com/storytold/craft-libs?rev=c5a1cbfb5f9049f9270955caffb5bee5997aebf7#c5a1cbfb5f9049f9270955caffb5bee5997aebf7"
 dependencies = [
  "fixed_decimal",
  "icu_decimal",
@@ -992,9 +992,10 @@ dependencies = [
 [[package]]
 name = "craft-print"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=92d392cff132eaf53e13afff77f38b5c11b73aa0#92d392cff132eaf53e13afff77f38b5c11b73aa0"
+source = "git+https://github.com/storytold/craft-libs?rev=c5a1cbfb5f9049f9270955caffb5bee5997aebf7#c5a1cbfb5f9049f9270955caffb5bee5997aebf7"
 dependencies = [
  "craft-winprint-gdi",
+ "log",
  "miniz_oxide 0.9.1",
  "roxmltree",
  "tempfile",
@@ -1005,7 +1006,7 @@ dependencies = [
 [[package]]
 name = "craft-ui"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=92d392cff132eaf53e13afff77f38b5c11b73aa0#92d392cff132eaf53e13afff77f38b5c11b73aa0"
+source = "git+https://github.com/storytold/craft-libs?rev=c5a1cbfb5f9049f9270955caffb5bee5997aebf7#c5a1cbfb5f9049f9270955caffb5bee5997aebf7"
 dependencies = [
  "craft-fonts-build",
  "craft-i18n",
@@ -1025,7 +1026,7 @@ dependencies = [
 [[package]]
 name = "craft-update"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=04aa1703b32d299e54f78fcde4182f2b393a9116#04aa1703b32d299e54f78fcde4182f2b393a9116"
+source = "git+https://github.com/storytold/craft-libs?rev=c5a1cbfb5f9049f9270955caffb5bee5997aebf7#c5a1cbfb5f9049f9270955caffb5bee5997aebf7"
 dependencies = [
  "chrono",
  "dunce",
@@ -1051,7 +1052,7 @@ dependencies = [
 [[package]]
 name = "craft-window"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=92d392cff132eaf53e13afff77f38b5c11b73aa0#92d392cff132eaf53e13afff77f38b5c11b73aa0"
+source = "git+https://github.com/storytold/craft-libs?rev=c5a1cbfb5f9049f9270955caffb5bee5997aebf7#c5a1cbfb5f9049f9270955caffb5bee5997aebf7"
 dependencies = [
  "egui",
  "objc2 0.6.5",
@@ -1542,7 +1543,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2039,7 +2040,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "arboard",
  "chrono",
@@ -2068,7 +2069,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-calc"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "gridcraft-core",
  "gridcraft-formula",
@@ -2080,7 +2081,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-chart"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "gridcraft-calc",
  "gridcraft-core",
@@ -2091,7 +2092,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-cli"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "gridcraft-engine",
  "gridcraft-mcp",
@@ -2104,7 +2105,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-core"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "chrono",
  "js-sys",
@@ -2115,7 +2116,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-engine"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "gridcraft-calc",
  "gridcraft-chart",
@@ -2138,7 +2139,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-formula"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "gridcraft-core",
  "serde",
@@ -2147,7 +2148,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-functions"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "gridcraft-core",
  "regex",
@@ -2155,7 +2156,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-mcp"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "gridcraft-engine",
  "log",
@@ -2164,7 +2165,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-model"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "gridcraft-core",
  "gridcraft-formula",
@@ -2176,18 +2177,18 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-numfmt"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "gridcraft-core",
 ]
 
 [[package]]
 name = "gridcraft-pdf"
-version = "0.14.2"
+version = "0.15.0"
 
 [[package]]
 name = "gridcraft-sqlserver"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "futures-util",
  "gridcraft-engine",
@@ -2199,7 +2200,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-ui-egui"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "craft-ui",
  "craft-update",
@@ -2224,7 +2225,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-vba"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "gridcraft-core",
  "gridcraft-numfmt",
@@ -2232,7 +2233,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-web"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "eframe",
  "egui",
@@ -2249,7 +2250,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-xlsx"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "aes",
  "gridcraft-core",
@@ -3697,7 +3698,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4126,7 +4127,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4477,7 +4478,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4536,7 +4537,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5298,7 +5299,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.5",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6326,7 +6327,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6825,7 +6826,7 @@ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "xtask"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "gridcraft-engine",
  "serde_json",
