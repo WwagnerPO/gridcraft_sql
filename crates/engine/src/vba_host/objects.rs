@@ -352,7 +352,7 @@ pub(super) fn decode_text(bytes: &[u8]) -> String {
         return String::from_utf8_lossy(rest).into_owned();
     }
     if let Some(rest) = bytes.strip_prefix(&[0xFF, 0xFE]) {
-        let units: Vec<u16> = rest.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        let units: Vec<u16> = rest.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c)).collect();
         return String::from_utf16_lossy(&units);
     }
     match std::str::from_utf8(bytes) {
